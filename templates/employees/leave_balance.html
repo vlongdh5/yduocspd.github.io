@@ -1,0 +1,53 @@
+{% extends "base/base.html" %}
+{% block title %}Ngày phép — {{ emp.full_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4><i class="bi bi-calendar3"></i> Ngày phép — {{ emp.full_name }}</h4>
+    <a href="/employees/" class="btn btn-outline-secondary btn-sm">← Quay lại</a>
+</div>
+<div class="row">
+    <div class="col-12 col-md-7">
+        <h5>Lịch sử ngày phép</h5>
+        <table class="table table-bordered">
+            <thead class="table-light">
+                <tr><th>Năm</th><th>Tổng phép</th><th>Đã dùng</th><th>Còn lại</th></tr>
+            </thead>
+            <tbody>
+                {% for lb in balances %}
+                <tr>
+                    <td>{{ lb.year }}</td>
+                    <td>{{ lb.total_days }}</td>
+                    <td>{{ lb.used_days }}</td>
+                    <td><strong>{{ lb.remaining_days }}</strong></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="text-center text-muted">Chưa có dữ liệu phép</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="col-12 col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-header bg-info text-white"><strong>Thêm / Cập nhật phép</strong></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <label class="form-label">Năm</label>
+                        {{ form.year }}
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Tổng số ngày phép</label>
+                        {{ form.total_days }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Đã sử dụng</label>
+                        {{ form.used_days }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Lưu</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
