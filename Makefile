@@ -14,6 +14,7 @@ seed:
 	.venv/bin/python manage.py seed_departments
 	.venv/bin/python manage.py seed_shifts
 	.venv/bin/python manage.py seed_employees
+	.venv/bin/python manage.py seed_explanation_reasons
 
 createsuperuser:
 	.venv/bin/python manage.py createsuperuser
