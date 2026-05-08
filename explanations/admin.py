@@ -1,3 +1,14 @@
 from django.contrib import admin
+from .models import ExplanationReason, Explanation
 
-# Register your models here.
+
+@admin.register(ExplanationReason)
+class ExplanationReasonAdmin(admin.ModelAdmin):
+    list_display = ['name', 'order', 'is_active']
+    list_editable = ['order', 'is_active']
+
+
+@admin.register(Explanation)
+class ExplanationAdmin(admin.ModelAdmin):
+    list_display = ['employee', 'record', 'reason', 'status', 'submitted_at']
+    list_filter = ['status']
