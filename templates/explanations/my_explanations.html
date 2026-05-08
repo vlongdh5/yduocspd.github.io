@@ -1,0 +1,29 @@
+{% extends "base/base.html" %}
+{% block title %}Lịch sử giải trình{% endblock %}
+{% block content %}
+<h4 class="mb-3"><i class="bi bi-list-check"></i> Lịch sử giải trình</h4>
+<div class="table-responsive">
+    <table class="table table-bordered table-hover">
+        <thead class="table-light">
+            <tr><th>Ngày</th><th>Lý do</th><th>Ghi chú</th><th>Trạng thái</th><th>Phản hồi</th></tr>
+        </thead>
+        <tbody>
+            {% for exp in explanations %}
+            <tr>
+                <td>{{ exp.record.date }}</td>
+                <td>{{ exp.reason.name }}</td>
+                <td>{{ exp.note|default:"-" }}</td>
+                <td>
+                    {% if exp.status == 'pending' %}<span class="badge bg-warning text-dark">Chờ duyệt</span>
+                    {% elif exp.status == 'approved' %}<span class="badge bg-success">Đã duyệt</span>
+                    {% else %}<span class="badge bg-danger">Từ chối</span>{% endif %}
+                </td>
+                <td>{{ exp.reviewer_note|default:"-" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-muted">Chưa có giải trình nào</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

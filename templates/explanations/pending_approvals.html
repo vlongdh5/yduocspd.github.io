@@ -1,0 +1,27 @@
+{% extends "base/base.html" %}
+{% block title %}Duyệt giải trình{% endblock %}
+{% block content %}
+<h4 class="mb-3"><i class="bi bi-check2-circle"></i> Giải trình chờ duyệt</h4>
+<div class="table-responsive">
+    <table class="table table-bordered table-hover">
+        <thead class="table-light">
+            <tr><th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th><th>Lỗi</th><th>Lý do</th><th>Ghi chú</th><th>Hành động</th></tr>
+        </thead>
+        <tbody>
+            {% for exp in explanations %}
+            <tr>
+                <td>{{ exp.employee.full_name }}</td>
+                <td>{{ exp.employee.department.name }}</td>
+                <td>{{ exp.record.date }}</td>
+                <td><small>{{ exp.record.error_types|join:", " }}</small></td>
+                <td>{{ exp.reason.name }}</td>
+                <td>{{ exp.note|default:"-" }}</td>
+                <td><a href="/explanations/review/{{ exp.pk }}/" class="btn btn-sm btn-primary">Xem & Duyệt</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="text-center text-muted py-4">Không có giải trình nào chờ duyệt</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

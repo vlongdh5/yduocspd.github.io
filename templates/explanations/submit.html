@@ -1,0 +1,43 @@
+{% extends "base/base.html" %}
+{% block title %}Giải trình ngày {{ record.date }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-warning text-dark">
+                <strong><i class="bi bi-exclamation-triangle"></i> Giải trình ngày {{ record.date }}</strong>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Lỗi phát hiện: <strong>{{ record.error_types|join:", " }}</strong></p>
+                {% if existing and existing.status == 'rejected' %}
+                <div class="alert alert-danger">
+                    <strong>Lý do từ chối:</strong> {{ existing.reviewer_note }}
+                </div>
+                {% endif %}
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Lý do *</label>
+                        {% for reason in reasons %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="reason" value="{{ reason.pk }}"
+                                id="reason_{{ reason.pk }}"
+                                {% if existing and existing.reason_id == reason.pk %}checked{% endif %} required>
+                            <label class="form-check-label" for="reason_{{ reason.pk }}">{{ reason.name }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Ghi chú thêm <span class="text-muted">(không bắt buộc)</span></label>
+                        <textarea name="note" class="form-control" rows="3" placeholder="Nhập ghi chú...">{% if existing %}{{ existing.note }}{% endif %}</textarea>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Nộp giải trình</button>
+                        <a href="/attendance/" class="btn btn-outline-secondary">Hủy</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

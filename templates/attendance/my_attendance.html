@@ -1,0 +1,105 @@
+{% extends "base/base.html" %}
+{% block title %}Chấm công của tôi{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h4 class="mb-0"><i class="bi bi-calendar-check"></i> Chấm công — {{ employee.full_name }}</h4>
+            <select class="form-select w-auto" onchange="window.location='?month='+this.value">
+                {% for m in months %}
+                <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+                {% if not months %}<option value="{{ month }}">{{ month }}</option>{% endif %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <a href="/explanations/my/" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-list-check"></i> Lịch sử giải trình
+            </a>
+        </div>
+
+        <!-- Desktop table -->
+        <div class="d-none d-md-block">
+            <table class="table table-bordered table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Ngày</th><th>Giờ vào</th><th>Giờ ra</th>
+                        <th>Ca</th><th>Trạng thái</th><th>Hành động</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rec in records %}
+                    <tr>
+                        <td>{{ rec.date }}</td>
+                        <td>{{ rec.check_in|default:"-" }}</td>
+                        <td>{{ rec.check_out|default:"-" }}</td>
+                        <td>{{ rec.shift_code|default:"-" }}</td>
+                        <td>
+                            {% if rec.status == 'ok' %}
+                                <span class="badge bg-success">Bình thường</span>
+                            {% else %}
+                                {% if rec.explanation %}
+                                    {% if rec.explanation.status == 'pending' %}
+                                        <span class="badge bg-warning text-dark">Chờ duyệt</span>
+                                    {% elif rec.explanation.status == 'approved' %}
+                                        <span class="badge bg-info">Đã duyệt</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Từ chối</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-danger">Lỗi</span>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if rec.status == 'error' %}
+                                {% if not rec.explanation %}
+                                    <a href="/explanations/submit/{{ rec.pk }}/" class="btn btn-sm btn-outline-primary">Giải trình</a>
+                                {% elif rec.explanation.status == 'pending' %}
+                                    <a href="/explanations/submit/{{ rec.pk }}/" class="btn btn-sm btn-outline-secondary">Sửa</a>
+                                {% elif rec.explanation.status == 'rejected' %}
+                                    <a href="/explanations/submit/{{ rec.pk }}/" class="btn btn-sm btn-outline-danger">Gửi lại</a>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">Chưa có dữ liệu chấm công tháng này</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Mobile cards -->
+        <div class="d-md-none">
+            {% for rec in records %}
+            <div class="card mb-2">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong>{{ rec.date }}</strong>
+                        {% if rec.status == 'ok' %}
+                            <span class="badge bg-success">OK</span>
+                        {% else %}
+                            {% if rec.explanation %}
+                                <span class="badge bg-warning text-dark">Chờ duyệt</span>
+                            {% else %}
+                                <span class="badge bg-danger">Lỗi</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    <small class="text-muted">Vào: {{ rec.check_in|default:"-" }} | Ra: {{ rec.check_out|default:"-" }} | Ca: {{ rec.shift_code|default:"-" }}</small>
+                    {% if rec.status == 'error' and not rec.explanation %}
+                    <div class="mt-1">
+                        <a href="/explanations/submit/{{ rec.pk }}/" class="btn btn-sm btn-outline-primary w-100">Giải trình</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-center text-muted mt-4">Chưa có dữ liệu</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
