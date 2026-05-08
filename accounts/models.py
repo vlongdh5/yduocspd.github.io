@@ -67,9 +67,7 @@ class SystemConfig(models.Model):
 
     @classmethod
     def set(cls, key, value):
-        obj, _ = cls.objects.get_or_create(key=key)
-        obj.value = value
-        obj.save()
+        cls.objects.update_or_create(key=key, defaults={'value': value})
 
     class Meta:
         verbose_name = 'Cấu hình hệ thống'
