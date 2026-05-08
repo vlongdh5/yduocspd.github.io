@@ -1,0 +1,27 @@
+{% extends "base/base.html" %}
+{% block title %}Đăng nhập — HR System{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-sm-8 col-md-5 col-lg-4">
+        <div class="card shadow-sm mt-5">
+            <div class="card-body p-4">
+                <h4 class="card-title text-center mb-4">
+                    <i class="bi bi-people-fill text-primary"></i> HR System
+                </h4>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        {{ form.email }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Mật khẩu</label>
+                        {{ form.password }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Đăng nhập</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

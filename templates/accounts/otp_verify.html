@@ -1,0 +1,22 @@
+{% extends "base/base.html" %}
+{% block title %}Xác thực OTP{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-sm-8 col-md-5 col-lg-4">
+        <div class="card shadow-sm mt-5">
+            <div class="card-body p-4 text-center">
+                <h5 class="mb-3">
+                    {% if method == 'totp' %}<i class="bi bi-phone"></i> Nhập mã từ Google Authenticator
+                    {% else %}<i class="bi bi-envelope"></i> Nhập mã OTP từ email{% endif %}
+                </h5>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">{{ form.otp_code }}</div>
+                    <button type="submit" class="btn btn-primary w-100">Xác nhận</button>
+                </form>
+                <a href="/accounts/login/" class="d-block mt-3 text-muted small">Quay lại đăng nhập</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

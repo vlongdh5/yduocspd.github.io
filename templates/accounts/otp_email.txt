@@ -1,0 +1,3 @@
+Mã OTP đăng nhập HR System của bạn là: {{ token }}
+
+Mã có hiệu lực trong 5 phút. Không chia sẻ mã này với bất kỳ ai.

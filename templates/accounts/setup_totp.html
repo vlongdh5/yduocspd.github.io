@@ -1,0 +1,22 @@
+{% extends "base/base.html" %}
+{% block title %}Cài Google Authenticator{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body p-4 text-center">
+                <h5 class="mb-3"><i class="bi bi-qr-code"></i> Cài đặt Google Authenticator</h5>
+                <p class="text-muted">Quét mã QR bằng ứng dụng Google Authenticator, sau đó nhập mã xác nhận bên dưới.</p>
+                <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code" class="img-fluid mb-3" style="max-width:200px">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <input type="text" name="code" class="form-control form-control-lg text-center" placeholder="000000" maxlength="6" inputmode="numeric" required>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">Xác nhận & kích hoạt</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
