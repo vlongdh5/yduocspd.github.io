@@ -1,0 +1,77 @@
+{% extends "base/base.html" %}
+{% block title %}Cấu hình hệ thống{% endblock %}
+{% block content %}
+<h4 class="mb-4"><i class="bi bi-gear-fill"></i> Cấu hình hệ thống</h4>
+
+<div class="row g-4">
+    <!-- OTP Settings -->
+    <div class="col-12 col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white"><strong>Xác thực OTP</strong></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" name="otp_enabled" id="otp_enabled"
+                            {% if otp_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="otp_enabled">
+                            Bật xác thực OTP khi đăng nhập
+                        </label>
+                    </div>
+                    <p class="text-muted small">
+                        Khi bật, nhân viên cần nhập mã OTP (qua email hoặc Google Authenticator) sau khi đăng nhập bằng email/mật khẩu.
+                    </p>
+                    <button type="submit" class="btn btn-primary">Lưu cài đặt OTP</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Types -->
+    <div class="col-12 col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-warning text-dark"><strong>Loại lỗi chấm công</strong></div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <thead><tr><th>Mã lỗi</th><th>Tên</th><th>Trạng thái</th></tr></thead>
+                    <tbody>
+                        {% for et in error_types %}
+                        <tr>
+                            <td><code>{{ et.code }}</code></td>
+                            <td>{{ et.name }}</td>
+                            <td>{% if et.is_active %}<span class="badge bg-success">Bật</span>{% else %}<span class="badge bg-secondary">Tắt</span>{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-muted">Chưa có loại lỗi. Chạy: <code>python manage.py seed_error_types</code></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <small class="text-muted">Để chỉnh sửa chi tiết, vào <a href="/admin/attendance/errortype/">Django Admin → Error Types</a></small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Explanation Reasons -->
+    <div class="col-12 col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-info text-white"><strong>Lý do giải trình</strong></div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <thead><tr><th>Lý do</th><th>Trạng thái</th></tr></thead>
+                    <tbody>
+                        {% for r in explanation_reasons %}
+                        <tr>
+                            <td>{{ r.name }}</td>
+                            <td>{% if r.is_active %}<span class="badge bg-success">Bật</span>{% else %}<span class="badge bg-secondary">Tắt</span>{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="2" class="text-muted">Chưa có lý do. Thêm qua <a href="/admin/explanations/explanationreason/">Admin</a></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <small class="text-muted">Quản lý tại <a href="/admin/explanations/explanationreason/">Django Admin → Explanation Reasons</a></small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
