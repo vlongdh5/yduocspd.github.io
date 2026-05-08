@@ -4,8 +4,9 @@
 <div class="row justify-content-center">
     <div class="col-12 col-md-7">
         <div class="card shadow-sm">
-            <div class="card-header bg-primary text-white">
-                <strong>Duyệt giải trình — {{ exp.employee.full_name }}</strong>
+            <div class="card-header {% if locked %}bg-secondary{% else %}bg-primary{% endif %} text-white d-flex justify-content-between align-items-center">
+                <strong>Giải trình — {{ exp.employee.full_name }}</strong>
+                {% if locked %}<span class="badge bg-light text-dark"><i class="bi bi-lock"></i> Đã chốt</span>{% endif %}
             </div>
             <div class="card-body">
                 <table class="table table-sm">
@@ -13,24 +14,52 @@
                     <tr><th>Loại lỗi</th><td>{{ exp.record.error_types|join:", " }}</td></tr>
                     <tr><th>Lý do NV</th><td>{{ exp.reason.name }}</td></tr>
                     <tr><th>Ghi chú</th><td>{{ exp.note|default:"-" }}</td></tr>
-                    <tr><th>Nộp lúc</th><td>{{ exp.submitted_at }}</td></tr>
+                    <tr><th>Nộp lúc</th><td>{{ exp.submitted_at|date:"d/m/Y H:i" }}</td></tr>
+                    {% if exp.status != 'pending' %}
+                    <tr>
+                        <th>Trạng thái hiện tại</th>
+                        <td>
+                            {% if exp.status == 'approved' %}
+                                <span class="badge bg-success">Đã duyệt</span>
+                            {% else %}
+                                <span class="badge bg-danger">Từ chối</span>
+                            {% endif %}
+                            — {{ exp.reviewed_by.get_full_name|default:exp.reviewed_by.email }}, {{ exp.reviewed_at|date:"d/m/Y H:i" }}
+                        </td>
+                    </tr>
+                    {% if exp.reviewer_note %}
+                    <tr><th>Ghi chú TBP</th><td>{{ exp.reviewer_note }}</td></tr>
+                    {% endif %}
+                    {% endif %}
                 </table>
+
+                {% if locked %}
+                <div class="alert alert-secondary mb-3">
+                    <i class="bi bi-lock"></i> Tháng này đã được HR chốt công — không thể thay đổi phê duyệt.
+                </div>
+                <a href="/explanations/pending/" class="btn btn-outline-secondary">Quay lại</a>
+                {% else %}
                 <form method="post">
                     {% csrf_token %}
                     <div class="mb-3">
-                        <label class="form-label">Ghi chú (khi từ chối)</label>
-                        <textarea name="reviewer_note" class="form-control" rows="2" placeholder="Lý do từ chối..."></textarea>
+                        <label class="form-label">Ghi chú</label>
+                        <textarea name="reviewer_note" class="form-control" rows="2" placeholder="Lý do từ chối hoặc ghi chú thêm...">{{ exp.reviewer_note }}</textarea>
                     </div>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 flex-wrap">
+                        {% if exp.status != 'approved' %}
                         <button type="submit" name="action" value="approve" class="btn btn-success">
                             <i class="bi bi-check-lg"></i> Duyệt
                         </button>
+                        {% endif %}
+                        {% if exp.status != 'rejected' %}
                         <button type="submit" name="action" value="reject" class="btn btn-danger">
                             <i class="bi bi-x-lg"></i> Từ chối
                         </button>
+                        {% endif %}
                         <a href="/explanations/pending/" class="btn btn-outline-secondary">Quay lại</a>
                     </div>
                 </form>
+                {% endif %}
             </div>
         </div>
     </div>

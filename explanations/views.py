@@ -4,6 +4,23 @@ from django.contrib import messages
 from django.utils import timezone
 from .models import Explanation, ExplanationReason
 from attendance.models import AttendanceRecord
+from reports.models import AttendanceCalculation
+
+
+def _is_month_finalized(employee, month):
+    return AttendanceCalculation.objects.filter(
+        employee=employee, month=month, status=AttendanceCalculation.Status.FINALIZED
+    ).exists()
+
+
+def _dept_filter(qs, user):
+    """Lọc theo phòng ban nếu là TBP (không phải HR)."""
+    if user.is_tbp and not user.is_hr:
+        dept = user.managed_departments.first()
+        if dept:
+            return qs.filter(employee__department=dept)
+        return qs.none()
+    return qs
 
 
 @login_required
@@ -56,15 +73,31 @@ def pending_approvals(request):
     if not (request.user.is_tbp or request.user.is_hr):
         return redirect('attendance:my_attendance')
 
-    qs = Explanation.objects.filter(status=Explanation.Status.PENDING).select_related(
-        'employee__department', 'record', 'reason'
+    base_qs = Explanation.objects.select_related(
+        'employee__department', 'record__upload', 'reason', 'reviewed_by'
     )
-    if request.user.is_tbp and not request.user.is_hr:
-        dept = request.user.managed_departments.first()
-        if dept:
-            qs = qs.filter(employee__department=dept)
 
-    return render(request, 'explanations/pending_approvals.html', {'explanations': qs})
+    pending = _dept_filter(
+        base_qs.filter(status=Explanation.Status.PENDING),
+        request.user
+    ).order_by('record__date')
+
+    reviewed = _dept_filter(
+        base_qs.filter(status__in=[Explanation.Status.APPROVED, Explanation.Status.REJECTED]),
+        request.user
+    ).order_by('-reviewed_at')
+
+    # Đánh dấu từng giải trình đã xử lý có bị khoá (tháng đã chốt) hay không
+    reviewed_with_lock = []
+    for exp in reviewed:
+        month = exp.record.upload.month if exp.record.upload_id else None
+        locked = _is_month_finalized(exp.employee, month) if month else False
+        reviewed_with_lock.append((exp, locked))
+
+    return render(request, 'explanations/pending_approvals.html', {
+        'pending': pending,
+        'reviewed_with_lock': reviewed_with_lock,
+    })
 
 
 @login_required
@@ -72,9 +105,19 @@ def review_explanation(request, pk):
     if not (request.user.is_tbp or request.user.is_hr):
         return redirect('attendance:my_attendance')
 
-    exp = get_object_or_404(Explanation, pk=pk)
+    exp = get_object_or_404(
+        Explanation.objects.select_related('record__upload', 'employee', 'reason'),
+        pk=pk
+    )
+
+    month = exp.record.upload.month if exp.record.upload_id else None
+    locked = _is_month_finalized(exp.employee, month) if month else False
 
     if request.method == 'POST':
+        if locked:
+            messages.error(request, 'Tháng này đã được chốt công, không thể thay đổi phê duyệt.')
+            return redirect('explanations:pending_approvals')
+
         action = request.POST.get('action')
         reviewer_note = request.POST.get('reviewer_note', '').strip()
         if action == 'approve':
@@ -88,4 +131,4 @@ def review_explanation(request, pk):
         messages.success(request, f'Đã {"duyệt" if action == "approve" else "từ chối"} giải trình.')
         return redirect('explanations:pending_approvals')
 
-    return render(request, 'explanations/review.html', {'exp': exp})
+    return render(request, 'explanations/review.html', {'exp': exp, 'locked': locked})

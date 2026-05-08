@@ -1,27 +1,86 @@
 {% extends "base/base.html" %}
 {% block title %}Duyệt giải trình{% endblock %}
 {% block content %}
-<h4 class="mb-3"><i class="bi bi-check2-circle"></i> Giải trình chờ duyệt</h4>
-<div class="table-responsive">
-    <table class="table table-bordered table-hover">
-        <thead class="table-light">
-            <tr><th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th><th>Lỗi</th><th>Lý do</th><th>Ghi chú</th><th>Hành động</th></tr>
-        </thead>
-        <tbody>
-            {% for exp in explanations %}
-            <tr>
-                <td>{{ exp.employee.full_name }}</td>
-                <td>{{ exp.employee.department.name }}</td>
-                <td>{{ exp.record.date }}</td>
-                <td><small>{{ exp.record.error_types|join:", " }}</small></td>
-                <td>{{ exp.reason.name }}</td>
-                <td>{{ exp.note|default:"-" }}</td>
-                <td><a href="/explanations/review/{{ exp.pk }}/" class="btn btn-sm btn-primary">Xem & Duyệt</a></td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="7" class="text-center text-muted py-4">Không có giải trình nào chờ duyệt</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<h4 class="mb-3"><i class="bi bi-check2-circle"></i> Phê duyệt giải trình</h4>
+
+<ul class="nav nav-tabs mb-3" id="approvalTabs">
+    <li class="nav-item">
+        <a class="nav-link active" data-bs-toggle="tab" href="#tab-pending">
+            Chờ duyệt
+            {% if pending %}<span class="badge bg-danger ms-1">{{ pending|length }}</span>{% endif %}
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-reviewed">
+            Đã xử lý
+            {% if reviewed_with_lock %}<span class="badge bg-secondary ms-1">{{ reviewed_with_lock|length }}</span>{% endif %}
+        </a>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <!-- Tab chờ duyệt -->
+    <div class="tab-pane fade show active" id="tab-pending">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover">
+                <thead class="table-light">
+                    <tr><th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th><th>Lỗi</th><th>Lý do</th><th>Ghi chú</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% for exp in pending %}
+                    <tr>
+                        <td>{{ exp.employee.full_name }}</td>
+                        <td>{{ exp.employee.department.name }}</td>
+                        <td>{{ exp.record.date }}</td>
+                        <td><small>{{ exp.record.error_types|join:", " }}</small></td>
+                        <td>{{ exp.reason.name }}</td>
+                        <td>{{ exp.note|default:"-" }}</td>
+                        <td><a href="/explanations/review/{{ exp.pk }}/" class="btn btn-sm btn-primary">Xem & Duyệt</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">Không có giải trình nào chờ duyệt</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Tab đã xử lý -->
+    <div class="tab-pane fade" id="tab-reviewed">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover">
+                <thead class="table-light">
+                    <tr><th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th><th>Lý do</th><th>Kết quả</th><th>Người duyệt</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% for exp, locked in reviewed_with_lock %}
+                    <tr>
+                        <td>{{ exp.employee.full_name }}</td>
+                        <td>{{ exp.employee.department.name }}</td>
+                        <td>{{ exp.record.date }}</td>
+                        <td>{{ exp.reason.name }}</td>
+                        <td>
+                            {% if exp.status == 'approved' %}
+                                <span class="badge bg-success">Đã duyệt</span>
+                            {% else %}
+                                <span class="badge bg-danger">Từ chối</span>
+                            {% endif %}
+                        </td>
+                        <td><small>{{ exp.reviewed_by.get_full_name|default:exp.reviewed_by.email }}<br class="d-none d-md-block">{{ exp.reviewed_at|date:"d/m H:i" }}</small></td>
+                        <td>
+                            {% if locked %}
+                                <span class="text-muted small"><i class="bi bi-lock"></i> Đã chốt</span>
+                            {% else %}
+                                <a href="/explanations/review/{{ exp.pk }}/" class="btn btn-sm btn-outline-secondary">Chỉnh sửa</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">Chưa có giải trình nào đã xử lý</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {% endblock %}
