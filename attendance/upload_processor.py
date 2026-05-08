@@ -1,4 +1,4 @@
-from attendance.models import AttendanceUpload, AttendanceRecord, ErrorType
+from attendance.models import AttendanceUpload, AttendanceRecord, ErrorType, Shift
 from attendance.parser import AttendanceRow
 from attendance.error_detector import detect_errors
 from employees.models import Employee
@@ -14,6 +14,7 @@ def _build_rules() -> dict:
 
 def process_upload(upload: AttendanceUpload, rows: list):
     employee_map = {emp.code: emp for emp in Employee.objects.filter(is_active=True)}
+    shift_map = {s.code: s for s in Shift.objects.filter(is_active=True)}
     rules = _build_rules()
     total = 0
     errors = 0
@@ -23,7 +24,8 @@ def process_upload(upload: AttendanceUpload, rows: list):
         if not emp:
             continue
 
-        error_codes = detect_errors(row, rules)
+        shift = shift_map.get(row.shift_code)
+        error_codes = detect_errors(row, rules, shift=shift)
         status = 'error' if error_codes else 'ok'
 
         AttendanceRecord.objects.update_or_create(
