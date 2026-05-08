@@ -1,0 +1,57 @@
+{% extends "base/base.html" %}
+{% block title %}Tính công{% endblock %}
+{% block content %}
+<h4 class="mb-4"><i class="bi bi-calculator"></i> Tính toán công tháng</h4>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row align-items-end g-3">
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-bold">Chọn tháng</label>
+                    <select name="month" class="form-select" required>
+                        {% for m in months %}
+                        <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
+                        {% endfor %}
+                        {% if not months %}<option value="">-- Chưa có dữ liệu upload --</option>{% endif %}
+                    </select>
+                </div>
+                <div class="col-12 col-md-auto">
+                    <button type="submit" name="action" value="calculate" class="btn btn-primary">
+                        <i class="bi bi-play-circle"></i> Tính công
+                    </button>
+                </div>
+                {% if results %}
+                <div class="col-12 col-md-auto">
+                    <button type="submit" name="action" value="export" class="btn btn-success">
+                        <i class="bi bi-file-earmark-excel"></i> Export Excel
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if results %}
+<h5>Kết quả tính công tháng {{ selected_month }}</h5>
+<div class="table-responsive">
+    <table class="table table-bordered table-hover">
+        <thead class="table-light">
+            <tr><th>Mã NV</th><th>Họ tên</th><th>Phòng ban</th><th>Ngày công</th><th>Ngày phép dùng</th></tr>
+        </thead>
+        <tbody>
+            {% for code, calc in results.items %}
+            <tr>
+                <td>{{ calc.employee.code }}</td>
+                <td>{{ calc.employee.full_name }}</td>
+                <td>{{ calc.employee.department.name }}</td>
+                <td class="text-center">{{ calc.actual_workdays }}</td>
+                <td class="text-center">{{ calc.leave_days_used }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}
