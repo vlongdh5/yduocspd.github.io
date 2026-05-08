@@ -1,0 +1,50 @@
+{% extends "base/base.html" %}
+{% block title %}Chi tiết upload {{ upload.month }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4><i class="bi bi-file-earmark-spreadsheet"></i> Upload tháng {{ upload.month }}</h4>
+    <a href="/attendance/upload/" class="btn btn-outline-secondary btn-sm">← Quay lại</a>
+</div>
+<div class="row mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-primary">{{ upload.total_records }}</h3>
+                <small class="text-muted">Tổng bản ghi</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-danger">{{ upload.error_records }}</h3>
+                <small class="text-muted">Bản ghi lỗi</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% if error_records %}
+<h5>Danh sách bản ghi lỗi</h5>
+<div class="table-responsive">
+    <table class="table table-sm table-bordered">
+        <thead class="table-light">
+            <tr><th>Mã NV</th><th>Họ tên</th><th>Ngày</th><th>Loại lỗi</th><th>Giờ vào</th><th>Giờ ra</th></tr>
+        </thead>
+        <tbody>
+            {% for rec in error_records %}
+            <tr class="table-warning">
+                <td>{{ rec.employee.code }}</td>
+                <td>{{ rec.employee.full_name }}</td>
+                <td>{{ rec.date }}</td>
+                <td>{{ rec.error_types|join:", " }}</td>
+                <td>{{ rec.check_in|default:"-" }}</td>
+                <td>{{ rec.check_out|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="alert alert-success"><i class="bi bi-check-circle"></i> Không có bản ghi lỗi nào!</div>
+{% endif %}
+{% endblock %}
