@@ -11,6 +11,9 @@ migrate:
 
 seed:
 	.venv/bin/python manage.py seed_error_types
+	.venv/bin/python manage.py seed_departments
+	.venv/bin/python manage.py seed_shifts
+	.venv/bin/python manage.py seed_employees
 
 createsuperuser:
 	.venv/bin/python manage.py createsuperuser

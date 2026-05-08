@@ -2,6 +2,29 @@ from django.db import models
 from accounts.models import User
 
 
+class Shift(models.Model):
+    code = models.CharField(max_length=100, unique=True, verbose_name='Ký hiệu ca')
+    check_in = models.TimeField(null=True, blank=True, verbose_name='Giờ vào')
+    check_out = models.TimeField(null=True, blank=True, verbose_name='Giờ ra')
+    total_hours = models.DecimalField(max_digits=4, decimal_places=1, default=0, verbose_name='Tổng giờ')
+    workday_value = models.DecimalField(max_digits=3, decimal_places=1, default=0, verbose_name='Ngày công')
+    leave_day_value = models.DecimalField(max_digits=3, decimal_places=1, default=0, verbose_name='Ngày phép')
+    work_hours = models.DecimalField(max_digits=4, decimal_places=1, default=0, verbose_name='Giờ công')
+    leave_hours = models.DecimalField(max_digits=4, decimal_places=1, default=0, verbose_name='Giờ phép')
+    break_start = models.TimeField(null=True, blank=True, verbose_name='Bắt đầu nghỉ trưa')
+    break_end = models.TimeField(null=True, blank=True, verbose_name='Kết thúc nghỉ trưa')
+    note = models.TextField(blank=True, verbose_name='Ghi chú')
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.code
+
+    class Meta:
+        verbose_name = 'Ca làm việc'
+        verbose_name_plural = 'Ca làm việc'
+        ordering = ['code']
+
+
 class AttendanceUpload(models.Model):
     class Status(models.TextChoices):
         PROCESSING = 'processing', 'Đang xử lý'

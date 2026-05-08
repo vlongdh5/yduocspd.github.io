@@ -9,6 +9,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_error_types
+python manage.py seed_departments
 python manage.py createsuperuser
 make dev
 ```
@@ -31,6 +32,6 @@ make test
 - **Employee**: view own attendance, submit explanations
 
 ## Key Commands
-- `make seed` — seed default error types after fresh migrate
+- `make seed` — seed default error types and departments after fresh migrate
 - `make createsuperuser` — create HR admin account
 - `/admin/` — Django admin for config (error types, explanation reasons)

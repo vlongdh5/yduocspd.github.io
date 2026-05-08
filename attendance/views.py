@@ -36,7 +36,7 @@ def upload_attendance(request):
 
     from .forms import AttendanceUploadForm
     from .upload_processor import process_upload
-    from .parser import parse_attendance_excel
+    from .parser import parse_attendance_excel, InvalidAttendanceFile
 
     recent_uploads = AttendanceUpload.objects.order_by('-uploaded_at')[:10]
 
@@ -53,6 +53,10 @@ def upload_attendance(request):
                     request,
                     f'Upload thành công: {upload.total_records} bản ghi, {upload.error_records} lỗi.'
                 )
+            except InvalidAttendanceFile as e:
+                upload.delete()
+                messages.error(request, str(e))
+                return render(request, 'attendance/upload.html', {'form': form, 'recent_uploads': recent_uploads})
             except Exception as e:
                 upload.status = AttendanceUpload.Status.ERROR
                 upload.notes = str(e)
