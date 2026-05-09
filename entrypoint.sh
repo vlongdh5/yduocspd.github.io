@@ -4,6 +4,9 @@ set -e
 echo "==> Migrate"
 python manage.py migrate --noinput
 
+echo "==> Create cache table"
+python manage.py createcachetable
+
 echo "==> Collect static"
 python manage.py collectstatic --noinput
 

@@ -156,13 +156,11 @@ def review_explanation(request, pk):
     if not (request.user.is_tbp or request.user.is_hr):
         return redirect('attendance:my_attendance')
 
-    exp = get_object_or_404(
-        Explanation.objects.select_related(
-            'record__upload', 'employee', 'ci_reason', 'co_reason',
-            'ci_reviewed_by', 'co_reviewed_by'
-        ),
-        pk=pk
+    qs = Explanation.objects.select_related(
+        'record__upload', 'employee', 'ci_reason', 'co_reason',
+        'ci_reviewed_by', 'co_reviewed_by'
     )
+    exp = get_object_or_404(_dept_filter(qs, request.user), pk=pk)
 
     month = exp.record.upload.month if exp.record.upload_id else None
     locked = _is_month_finalized(exp.employee, month) if month else False

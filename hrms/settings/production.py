@@ -1,6 +1,8 @@
 from .base import *
 import os
 
+ADMIN_URL = os.environ.get('ADMIN_URL', 'admin/')
+
 DEBUG = False
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
 
@@ -31,3 +33,6 @@ SECURE_SSL_REDIRECT = True
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
+
+SESSION_COOKIE_AGE = 28800          # 8 giờ
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
