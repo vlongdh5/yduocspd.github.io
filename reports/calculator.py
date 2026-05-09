@@ -1,41 +1,303 @@
 from decimal import Decimal
-from attendance.models import AttendanceRecord
+from datetime import time
+from attendance.models import AttendanceRecord, Shift
 from explanations.models import Explanation
 from employees.models import Employee
 from reports.models import AttendanceCalculation
 from accounts.models import User
 
 
-def calculate_month(month: str, calculated_by: User) -> dict:
-    records = AttendanceRecord.objects.filter(
-        upload__month=month
-    ).select_related('employee', 'explanation')
+LEAVE_REASONS = {'Đi muộn/ Về sớm'}     # approved → minutes counted as leave, work reduced
+EXCUSED_REASONS = {
+    'Quên chấm công',
+    'Trị liệu tại nhà',
+    'Đi công tác/ tổ chức sự kiện/ công việc khác theo chỉ đạo',
+}
+LEAVE_FULL_DAY_REASONS = {'Nghỉ phép cả ngày'}
+LEAVE_HALF_DAY_REASONS = {'Nghỉ phép nửa ngày'}
+UNPAID_REASONS = {'Nghỉ không lương'}
+QCC_REASON = 'Quên chấm công'
 
-    results = {}
+
+class RC:
+    """
+    Internal result codes for per-session attendance calculation.
+
+    Code            | Tiếng Việt          | Ý nghĩa
+    ----------------|---------------------|----------------------------------------
+    OK              | Công                | Không lỗi / đã tha — không trừ gì
+    DAY_OFF         | Nghỉ                | Nghỉ cả phiên (phép hoặc không lương)
+    UNEXCUSED       | Không (trừ phút)    | LATE/EARLY chưa duyệt — trừ đúng phút
+    UNEXCUSED_BLOCK | Không (trừ block)   | MISSING_IN/OUT chưa duyệt — trừ cả nửa ngày
+    LEAVE           | Phép (phút)         | Duyệt phép — phút trừ vào số giờ phép
+    LEAVE_BLOCK     | Phép (nửa ngày)     | Duyệt nghỉ nửa ngày — block trừ vào số giờ phép
+    """
+    OK = 'OK'
+    DAY_OFF = 'DAY_OFF'
+    UNEXCUSED = 'UNEXCUSED'
+    UNEXCUSED_BLOCK = 'UNEXCUSED_BLOCK'
+    LEAVE = 'LEAVE'
+    LEAVE_BLOCK = 'LEAVE_BLOCK'
+
+
+def _to_minutes(t: time) -> int:
+    return t.hour * 60 + t.minute
+
+
+def _break_minutes(shift: Shift) -> int:
+    if shift and shift.break_start and shift.break_end:
+        return _to_minutes(shift.break_end) - _to_minutes(shift.break_start)
+    return 0
+
+
+def _morning_block_hours(shift: Shift) -> float:
+    if shift and shift.check_in and shift.break_start:
+        return (_to_minutes(shift.break_start) - _to_minutes(shift.check_in)) / 60
+    if shift and shift.check_in and shift.check_out:
+        total = (_to_minutes(shift.check_out) - _to_minutes(shift.check_in)) / 60
+        return round(total / 2, 2)
+    return 4.0
+
+
+def _afternoon_block_hours(shift: Shift) -> float:
+    if shift and shift.break_end and shift.check_out:
+        return (_to_minutes(shift.check_out) - _to_minutes(shift.break_end)) / 60
+    if shift and shift.check_in and shift.check_out:
+        total = (_to_minutes(shift.check_out) - _to_minutes(shift.check_in)) / 60
+        return round(total / 2, 2)
+    return 4.0
+
+
+def _ci_result(error_set, ci_reason, ci_approved):
+    """Determine result code for CI (check-in) side."""
+    has_ci = bool(error_set & {'LATE', 'MISSING_IN'})
+    if not has_ci:
+        return RC.OK
+    if not ci_approved or ci_reason is None:
+        return RC.UNEXCUSED_BLOCK if 'MISSING_IN' in error_set else RC.UNEXCUSED
+    rn = ci_reason.name
+    if rn in LEAVE_HALF_DAY_REASONS:
+        return RC.LEAVE_BLOCK
+    if rn in LEAVE_FULL_DAY_REASONS or rn in UNPAID_REASONS:
+        return RC.DAY_OFF
+    if rn in LEAVE_REASONS:
+        return RC.LEAVE
+    return RC.OK  # EXCUSED_REASONS and any unknown approved = excused
+
+
+def _co_result(error_set, co_reason, co_approved):
+    """Determine result code for CO (check-out) side."""
+    has_co = bool(error_set & {'EARLY_LEAVE', 'MISSING_OUT'})
+    if not has_co:
+        return RC.OK
+    if not co_approved or co_reason is None:
+        return RC.UNEXCUSED_BLOCK if 'MISSING_OUT' in error_set else RC.UNEXCUSED
+    rn = co_reason.name
+    if rn in LEAVE_HALF_DAY_REASONS:
+        return RC.LEAVE_BLOCK
+    if rn in LEAVE_FULL_DAY_REASONS or rn in UNPAID_REASONS:
+        return RC.DAY_OFF
+    if rn in LEAVE_REASONS:
+        return RC.LEAVE
+    return RC.OK
+
+
+def _effective_minutes(minutes, block_min, break_min):
+    """Remove break time from late/early count when the span crosses into the break period."""
+    if minutes <= block_min:
+        return minutes
+    return minutes - min(break_min, minutes - block_min)
+
+
+def _apply_adj(result, minutes, shift, session):
+    """Returns (Δwork_hours, Δleave_hours). Negative = deduction."""
+    if result in (RC.OK, RC.DAY_OFF):
+        return 0.0, 0.0
+    m = minutes or 0
+    if result in (RC.UNEXCUSED, RC.LEAVE):
+        # Subtract break time if late/early span crosses the half-day boundary
+        if shift and m > 0:
+            block_min = (_morning_block_hours(shift) if session == 'morning'
+                         else _afternoon_block_hours(shift)) * 60
+            m = _effective_minutes(m, block_min, _break_minutes(shift))
+        h = m / 60
+        return (-h, h) if result == RC.LEAVE else (-h, 0.0)
+    if result == RC.UNEXCUSED_BLOCK:
+        block = _morning_block_hours(shift) if session == 'morning' else _afternoon_block_hours(shift)
+        return -block, 0.0
+    if result == RC.LEAVE_BLOCK:
+        block = _morning_block_hours(shift) if session == 'morning' else _afternoon_block_hours(shift)
+        return -block, block
+    return 0.0, 0.0
+
+
+def _is_qcc_record(exp):
+    """True if this record has an approved QCC explanation on either side."""
+    if exp is None:
+        return False
+    ci_qcc = (exp.ci_reason and exp.ci_reason.name == QCC_REASON
+              and exp.ci_status == Explanation.Status.APPROVED)
+    co_qcc = (exp.co_reason and exp.co_reason.name == QCC_REASON
+              and exp.co_status == Explanation.Status.APPROVED)
+    return ci_qcc or co_qcc
+
+
+def compute_record_hours(record, exp, shift, qcc_count):
+    """
+    Compute (work_hours, leave_hours) for a single attendance record.
+
+    qcc_count: cumulative QCC occurrences up to and including this record for the employee this month.
+    """
+    error_set = set(record.error_types)
+    base_work = float(shift.work_hours) if shift else 8.0
+    base_leave = float(shift.leave_hours) if shift else 0.0
+
+    if not error_set:
+        return base_work, base_leave
+
+    ci_reason = exp.ci_reason if exp else None
+    co_reason = exp.co_reason if exp else None
+    ci_approved = bool(exp and exp.ci_status == Explanation.Status.APPROVED)
+    co_approved = bool(exp and exp.co_status == Explanation.Status.APPROVED)
+
+    # Full-day absent: both CI and CO missing
+    if 'ABSENT' in error_set:
+        reason = ci_reason or co_reason
+        approved = ci_approved or co_approved
+        if approved and reason:
+            if reason.name in LEAVE_FULL_DAY_REASONS:
+                return 0.0, base_work  # full day deducted from leave balance
+            if reason.name in UNPAID_REASONS:
+                return 0.0, 0.0  # unpaid
+        return 0.0, 0.0  # unapproved/no explanation = unpaid
+
+    result_ci = _ci_result(error_set, ci_reason, ci_approved)
+    result_co = _co_result(error_set, co_reason, co_approved)
+
+    # Both sides off = full day off
+    if result_ci == RC.DAY_OFF and result_co == RC.DAY_OFF:
+        ci_leave = ci_reason and ci_reason.name in LEAVE_FULL_DAY_REASONS
+        co_leave = co_reason and co_reason.name in LEAVE_FULL_DAY_REASONS
+        if ci_leave or co_leave:
+            return 0.0, base_work
+        return 0.0, 0.0
+
+    d_work_ci, d_leave_ci = _apply_adj(result_ci, record.minutes_late, shift, 'morning')
+    d_work_co, d_leave_co = _apply_adj(result_co, record.minutes_early, shift, 'afternoon')
+
+    work = base_work + d_work_ci + d_work_co
+    leave = base_leave + d_leave_ci + d_leave_co
+
+    # LEAVE_BLOCK overflow: when late/early minutes exceed the half-day block (excluding break),
+    # the excess spills into the other session and is counted as leave.
+    if result_ci == RC.LEAVE_BLOCK and record.minutes_late and shift:
+        overflow = record.minutes_late - _morning_block_hours(shift) * 60 - _break_minutes(shift)
+        if overflow > 0:
+            work -= overflow / 60
+            leave += overflow / 60
+    if result_co == RC.LEAVE_BLOCK and record.minutes_early and shift:
+        overflow = record.minutes_early - _afternoon_block_hours(shift) * 60 - _break_minutes(shift)
+        if overflow > 0:
+            work -= overflow / 60
+            leave += overflow / 60
+
+    work = max(work, 0.0)
+
+    # QCC lần 3+: split remaining work 50/50 with leave
+    if _is_qcc_record(exp) and qcc_count >= 3:
+        half = round(work / 2, 2)
+        leave += half
+        work = half
+
+    return round(work, 2), round(leave, 2)
+
+
+def _validate_month(month: str) -> dict:
+    """
+    Return {'not_submitted': [...codes], 'not_approved': [...codes]}.
+    not_submitted: employee hasn't filled in a reason yet.
+    not_approved:  reason submitted but still pending or rejected (not approved by TBP).
+    """
+    not_submitted = set()
+    not_approved = set()
+
+    records = AttendanceRecord.objects.filter(
+        upload__month=month, status='error'
+    ).select_related('explanation')
 
     for record in records:
-        code = record.employee.code
-        if code not in results:
-            results[code] = {'employee': record.employee, 'workdays': Decimal(0), 'leave': Decimal(0)}
+        exp = getattr(record, 'explanation', None)
+        needs_ci = record.has_ci_issue
+        needs_co = record.has_co_issue
 
-        if record.status == 'ok':
-            results[code]['workdays'] += Decimal(1)
-        elif record.status == 'error':
-            exp = getattr(record, 'explanation', None)
-            if exp and exp.status == Explanation.Status.APPROVED:
-                results[code]['workdays'] += Decimal(1)
-            else:
-                results[code]['leave'] += Decimal(1)
+        ci_submitted = exp and exp.ci_reason_id is not None
+        co_submitted = exp and exp.co_reason_id is not None
+        ci_approved = exp and exp.ci_status == Explanation.Status.APPROVED
+        co_approved = exp and exp.co_status == Explanation.Status.APPROVED
+
+        if (needs_ci and not ci_submitted) or (needs_co and not co_submitted):
+            not_submitted.add(record.employee.code)
+        elif (needs_ci and not ci_approved) or (needs_co and not co_approved):
+            not_approved.add(record.employee.code)
+
+    return {'not_submitted': sorted(not_submitted), 'not_approved': sorted(not_approved)}
+
+
+def calculate_month(month: str, calculated_by: User) -> dict:
+    issues = _validate_month(month)
+    errors = []
+    if issues['not_submitted']:
+        errors.append(f'{len(issues["not_submitted"])} NV chưa nộp giải trình: {", ".join(issues["not_submitted"])}')
+    if issues['not_approved']:
+        errors.append(f'{len(issues["not_approved"])} NV chờ/từ chối chưa được duyệt: {", ".join(issues["not_approved"])}')
+    if errors:
+        raise ValueError(' | '.join(errors))
+
+    records = AttendanceRecord.objects.filter(
+        upload__month=month
+    ).select_related(
+        'employee', 'explanation__ci_reason', 'explanation__co_reason'
+    ).order_by('employee__code', 'date')
+
+    shift_map = {s.code: s for s in Shift.objects.filter(is_active=True)}
+
+    # Group records by employee
+    by_employee: dict[str, list] = {}
+    for record in records:
+        code = record.employee.code
+        if code not in by_employee:
+            by_employee[code] = []
+        by_employee[code].append(record)
 
     calcs = {}
-    for code, data in results.items():
-        emp = data['employee']
+    for code, emp_records in by_employee.items():
+        emp = emp_records[0].employee
+        total_work = 0.0
+        total_leave = 0.0
+        qcc_count = 0
+
+        for record in emp_records:
+            exp = getattr(record, 'explanation', None)
+            shift = shift_map.get(record.shift_code) if record.shift_code else None
+
+            if _is_qcc_record(exp):
+                qcc_count += 1
+
+            w, l = compute_record_hours(record, exp, shift, qcc_count)
+            total_work += w
+            total_leave += l
+
+        total_work = round(total_work, 2)
+        total_leave = round(total_leave, 2)
+
         calc, _ = AttendanceCalculation.objects.update_or_create(
             employee=emp,
             month=month,
             defaults={
-                'actual_workdays': data['workdays'],
-                'leave_days_used': data['leave'],
+                'work_hours': Decimal(str(total_work)),
+                'leave_hours': Decimal(str(total_leave)),
+                'actual_workdays': Decimal(str(round(total_work / 8, 2))),
+                'leave_days_used': Decimal(str(round(total_leave / 8, 2))),
                 'calculated_by': calculated_by,
                 'status': AttendanceCalculation.Status.DRAFT,
             }

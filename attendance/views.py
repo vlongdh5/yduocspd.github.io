@@ -1,31 +1,56 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.utils import timezone
 from .models import AttendanceRecord, AttendanceUpload
+
+
+def _is_fully_submitted(record):
+    """True if all CI/CO issues on this error record have been submitted."""
+    exp = getattr(record, 'explanation', None)
+    if record.has_ci_issue and (exp is None or exp.ci_reason_id is None):
+        return False
+    if record.has_co_issue and (exp is None or exp.co_reason_id is None):
+        return False
+    return True
 
 
 @login_required
 def my_attendance(request):
     from datetime import date
-    month = request.GET.get('month', date.today().strftime('%Y-%m'))
     try:
         employee = request.user.employee_profile
     except Exception:
         return render(request, 'attendance/no_profile.html')
 
-    records = AttendanceRecord.objects.filter(
-        employee=employee,
-        upload__month=month
-    ).select_related('explanation').order_by('date')
+    months = (AttendanceRecord.objects
+              .filter(employee=employee)
+              .values_list('upload__month', flat=True)
+              .distinct().order_by('-upload__month'))
 
-    months = AttendanceUpload.objects.values_list('month', flat=True).distinct().order_by('-month')
+    # Default: tháng gần nhất có dữ liệu của nhân viên này
+    default_month = months[0] if months else date.today().strftime('%Y-%m')
+    month = request.GET.get('month', default_month)
+
+    records = (AttendanceRecord.objects
+               .filter(employee=employee, upload__month=month)
+               .select_related('explanation')
+               .order_by('date'))
+
+    # Tổng số ngày lỗi chưa nộp đủ giải trình (toàn bộ tháng)
+    error_records = (AttendanceRecord.objects
+                     .filter(employee=employee, status='error')
+                     .select_related('explanation'))
+    pending_count = sum(
+        1 for r in error_records
+        if not _is_fully_submitted(r)
+    )
 
     return render(request, 'attendance/my_attendance.html', {
         'records': records,
         'month': month,
         'months': months,
         'employee': employee,
+        'pending_count': pending_count,
     })
 
 

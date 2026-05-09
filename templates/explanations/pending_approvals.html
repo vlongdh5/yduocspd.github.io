@@ -24,7 +24,10 @@
         <div class="table-responsive">
             <table class="table table-bordered table-hover">
                 <thead class="table-light">
-                    <tr><th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th><th>Lỗi</th><th>Lý do</th><th>Ghi chú</th><th></th></tr>
+                    <tr>
+                        <th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th><th>Lỗi</th>
+                        <th>CI</th><th>CO</th><th></th>
+                    </tr>
                 </thead>
                 <tbody>
                     {% for exp in pending %}
@@ -33,8 +36,34 @@
                         <td>{{ exp.employee.department.name }}</td>
                         <td>{{ exp.record.date }}</td>
                         <td><small>{{ exp.record.error_types|join:", " }}</small></td>
-                        <td>{{ exp.reason.name }}</td>
-                        <td>{{ exp.note|default:"-" }}</td>
+                        <td>
+                            {% if exp.has_ci_issue %}
+                                {% if exp.ci_status == 'pending' %}
+                                    <span class="badge bg-warning text-dark">Chờ duyệt</span>
+                                    {% if exp.ci_reason %}<small class="d-block text-muted">{{ exp.ci_reason.name }}</small>{% endif %}
+                                {% elif exp.ci_status == 'approved' %}
+                                    <span class="badge bg-success">Đã duyệt</span>
+                                {% elif exp.ci_status == 'rejected' %}
+                                    <span class="badge bg-danger">Từ chối</span>
+                                {% else %}
+                                    <span class="text-muted small">Chưa nộp</span>
+                                {% endif %}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>
+                            {% if exp.has_co_issue %}
+                                {% if exp.co_status == 'pending' %}
+                                    <span class="badge bg-warning text-dark">Chờ duyệt</span>
+                                    {% if exp.co_reason %}<small class="d-block text-muted">{{ exp.co_reason.name }}</small>{% endif %}
+                                {% elif exp.co_status == 'approved' %}
+                                    <span class="badge bg-success">Đã duyệt</span>
+                                {% elif exp.co_status == 'rejected' %}
+                                    <span class="badge bg-danger">Từ chối</span>
+                                {% else %}
+                                    <span class="text-muted small">Chưa nộp</span>
+                                {% endif %}
+                            {% else %}—{% endif %}
+                        </td>
                         <td><a href="/explanations/review/{{ exp.pk }}/" class="btn btn-sm btn-primary">Xem & Duyệt</a></td>
                     </tr>
                     {% empty %}
@@ -50,7 +79,10 @@
         <div class="table-responsive">
             <table class="table table-bordered table-hover">
                 <thead class="table-light">
-                    <tr><th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th><th>Lý do</th><th>Kết quả</th><th>Người duyệt</th><th></th></tr>
+                    <tr>
+                        <th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th>
+                        <th>CI</th><th>CO</th><th>Nộp lúc</th><th></th>
+                    </tr>
                 </thead>
                 <tbody>
                     {% for exp, locked in reviewed_with_lock %}
@@ -58,15 +90,23 @@
                         <td>{{ exp.employee.full_name }}</td>
                         <td>{{ exp.employee.department.name }}</td>
                         <td>{{ exp.record.date }}</td>
-                        <td>{{ exp.reason.name }}</td>
                         <td>
-                            {% if exp.status == 'approved' %}
-                                <span class="badge bg-success">Đã duyệt</span>
-                            {% else %}
-                                <span class="badge bg-danger">Từ chối</span>
-                            {% endif %}
+                            {% if exp.has_ci_issue %}
+                                {% if exp.ci_status == 'approved' %}<span class="badge bg-success">Duyệt</span>
+                                {% elif exp.ci_status == 'rejected' %}<span class="badge bg-danger">Từ chối</span>
+                                {% else %}<span class="text-muted small">—</span>{% endif %}
+                                {% if exp.ci_reason %}<small class="d-block text-muted">{{ exp.ci_reason.name }}</small>{% endif %}
+                            {% else %}—{% endif %}
                         </td>
-                        <td><small>{{ exp.reviewed_by.get_full_name|default:exp.reviewed_by.email }}<br class="d-none d-md-block">{{ exp.reviewed_at|date:"d/m H:i" }}</small></td>
+                        <td>
+                            {% if exp.has_co_issue %}
+                                {% if exp.co_status == 'approved' %}<span class="badge bg-success">Duyệt</span>
+                                {% elif exp.co_status == 'rejected' %}<span class="badge bg-danger">Từ chối</span>
+                                {% else %}<span class="text-muted small">—</span>{% endif %}
+                                {% if exp.co_reason %}<small class="d-block text-muted">{{ exp.co_reason.name }}</small>{% endif %}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td><small>{{ exp.submitted_at|date:"d/m H:i" }}</small></td>
                         <td>
                             {% if locked %}
                                 <span class="text-muted small"><i class="bi bi-lock"></i> Đã chốt</span>

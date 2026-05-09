@@ -8,7 +8,7 @@ from explanations.models import ExplanationReason
 
 @login_required
 def config_view(request):
-    if not request.user.is_hr:
+    if not request.user.is_superuser:
         return redirect('attendance:my_attendance')
 
     if request.method == 'POST':

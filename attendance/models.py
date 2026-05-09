@@ -58,9 +58,22 @@ class AttendanceRecord(models.Model):
     date = models.DateField()
     check_in = models.TimeField(null=True, blank=True)
     check_out = models.TimeField(null=True, blank=True)
-    shift_code = models.CharField(max_length=20, blank=True)
+    shift_code = models.CharField(max_length=100, blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OK)
     error_types = models.JSONField(default=list)
+    minutes_late = models.IntegerField(null=True, blank=True)   # phút đi muộn (dương)
+    minutes_early = models.IntegerField(null=True, blank=True)  # phút về sớm (dương)
+
+    CI_ERRORS = {'MISSING_IN', 'LATE', 'ABSENT'}
+    CO_ERRORS = {'MISSING_OUT', 'EARLY_LEAVE', 'ABSENT'}
+
+    @property
+    def has_ci_issue(self):
+        return bool(set(self.error_types) & self.CI_ERRORS)
+
+    @property
+    def has_co_issue(self):
+        return bool(set(self.error_types) & self.CO_ERRORS)
 
     class Meta:
         verbose_name = 'Bản ghi chấm công'

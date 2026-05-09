@@ -39,9 +39,12 @@ def _parse_time(value) -> Optional[time]:
         value = value.strip()
         if not value:
             return None
-        for fmt in ('%H:%M', '%H:%M:%S'):
+        # Strip erroneous AM/PM suffix when hour is already 24h (e.g. "13:41:57 PM")
+        import re as _re
+        cleaned = _re.sub(r'\s+[AaPp][Mm]$', '', value).strip()
+        for fmt in ('%H:%M', '%H:%M:%S', '%I:%M:%S %p', '%I:%M %p'):
             try:
-                return datetime.strptime(value, fmt).time()
+                return datetime.strptime(cleaned if fmt in ('%H:%M', '%H:%M:%S') else value, fmt).time()
             except ValueError:
                 pass
     return None

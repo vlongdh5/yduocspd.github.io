@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
 from .models import Explanation, ExplanationReason
-from attendance.models import AttendanceRecord
+from attendance.models import AttendanceRecord, Shift
 from reports.models import AttendanceCalculation
 
 
@@ -14,7 +14,6 @@ def _is_month_finalized(employee, month):
 
 
 def _dept_filter(qs, user):
-    """Lọc theo phòng ban nếu là TBP (không phải HR)."""
     if user.is_tbp and not user.is_hr:
         dept = user.managed_departments.first()
         if dept:
@@ -23,40 +22,81 @@ def _dept_filter(qs, user):
     return qs
 
 
+def _get_shift(record):
+    if record.shift_code:
+        return Shift.objects.filter(code=record.shift_code, is_active=True).first()
+    return None
+
+
+def _reasons_for_shift(shift):
+    qs = ExplanationReason.objects.filter(is_active=True)
+    if shift is None or float(shift.workday_value) != 1:
+        qs = qs.filter(requires_full_day_shift=False)
+    return qs
+
+
 @login_required
 def submit_explanation(request, record_id):
     record = get_object_or_404(AttendanceRecord, pk=record_id, employee=request.user.employee_profile)
-    existing = getattr(record, 'explanation', None)
+    exp = getattr(record, 'explanation', None)
 
-    if existing and existing.status == Explanation.Status.APPROVED:
-        messages.info(request, 'Giải trình này đã được duyệt.')
+    shift = _get_shift(record)
+    reasons = _reasons_for_shift(shift)
+
+    has_ci = record.has_ci_issue
+    has_co = record.has_co_issue
+
+    # Block if both sides approved
+    ci_locked = exp and exp.ci_status == Explanation.Status.APPROVED
+    co_locked = exp and exp.co_status == Explanation.Status.APPROVED
+    if ci_locked and co_locked:
+        messages.info(request, 'Giải trình này đã được duyệt hoàn toàn.')
         return redirect('attendance:my_attendance')
 
-    reasons = ExplanationReason.objects.filter(is_active=True)
-
     if request.method == 'POST':
-        reason_id = request.POST.get('reason')
-        note = request.POST.get('note', '').strip()
-        reason = get_object_or_404(ExplanationReason, pk=reason_id, is_active=True)
+        ci_reason_id = request.POST.get('ci_reason')
+        ci_note = request.POST.get('ci_note', '').strip()
+        co_reason_id = request.POST.get('co_reason')
+        co_note = request.POST.get('co_note', '').strip()
 
-        if existing:
-            existing.reason = reason
-            existing.note = note
-            existing.status = Explanation.Status.PENDING
-            existing.reviewed_by = None
-            existing.reviewed_at = None
-            existing.reviewer_note = ''
-            existing.save()
-        else:
-            Explanation.objects.create(
-                record=record, employee=request.user.employee_profile,
-                reason=reason, note=note
-            )
+        ci_changed = has_ci and not ci_locked and ci_reason_id
+        co_changed = has_co and not co_locked and co_reason_id
+
+        if not ci_changed and not co_changed:
+            messages.warning(request, 'Vui lòng chọn lý do giải trình.')
+            return redirect('attendance:my_attendance')
+
+        if exp is None:
+            exp = Explanation(record=record, employee=request.user.employee_profile)
+
+        if ci_changed:
+            exp.ci_reason = get_object_or_404(ExplanationReason, pk=ci_reason_id, is_active=True)
+            exp.ci_note = ci_note
+            exp.ci_status = Explanation.Status.PENDING
+            exp.ci_reviewed_by = None
+            exp.ci_reviewed_at = None
+            exp.ci_reviewer_note = ''
+
+        if co_changed:
+            exp.co_reason = get_object_or_404(ExplanationReason, pk=co_reason_id, is_active=True)
+            exp.co_note = co_note
+            exp.co_status = Explanation.Status.PENDING
+            exp.co_reviewed_by = None
+            exp.co_reviewed_at = None
+            exp.co_reviewer_note = ''
+
+        exp.save()
         messages.success(request, 'Giải trình đã được nộp.')
         return redirect('attendance:my_attendance')
 
     return render(request, 'explanations/submit.html', {
-        'record': record, 'reasons': reasons, 'existing': existing
+        'record': record,
+        'exp': exp,
+        'reasons': reasons,
+        'has_ci': has_ci,
+        'has_co': has_co,
+        'ci_locked': ci_locked,
+        'co_locked': co_locked,
     })
 
 
@@ -64,7 +104,7 @@ def submit_explanation(request, record_id):
 def my_explanations(request):
     explanations = Explanation.objects.filter(
         employee=request.user.employee_profile
-    ).select_related('reason', 'record', 'reviewed_by').order_by('-submitted_at')
+    ).select_related('ci_reason', 'co_reason', 'record').order_by('-submitted_at')
     return render(request, 'explanations/my_explanations.html', {'explanations': explanations})
 
 
@@ -74,20 +114,31 @@ def pending_approvals(request):
         return redirect('attendance:my_attendance')
 
     base_qs = Explanation.objects.select_related(
-        'employee__department', 'record__upload', 'reason', 'reviewed_by'
+        'employee__department', 'record__upload', 'ci_reason', 'co_reason',
+        'ci_reviewed_by', 'co_reviewed_by'
     )
 
+    from django.db.models import Q
+
+    # Chờ duyệt: ít nhất 1 phía có ci/co_status = pending
     pending = _dept_filter(
-        base_qs.filter(status=Explanation.Status.PENDING),
+        base_qs.filter(
+            Q(ci_status=Explanation.Status.PENDING) | Q(co_status=Explanation.Status.PENDING)
+        ),
         request.user
     ).order_by('record__date')
 
+    # Đã xử lý: không còn phía nào pending, nhưng có ít nhất 1 phía đã duyệt/từ chối
     reviewed = _dept_filter(
-        base_qs.filter(status__in=[Explanation.Status.APPROVED, Explanation.Status.REJECTED]),
+        base_qs.exclude(
+            Q(ci_status=Explanation.Status.PENDING) | Q(co_status=Explanation.Status.PENDING)
+        ).filter(
+            Q(ci_status__in=[Explanation.Status.APPROVED, Explanation.Status.REJECTED]) |
+            Q(co_status__in=[Explanation.Status.APPROVED, Explanation.Status.REJECTED])
+        ),
         request.user
-    ).order_by('-reviewed_at')
+    ).order_by('-submitted_at')
 
-    # Đánh dấu từng giải trình đã xử lý có bị khoá (tháng đã chốt) hay không
     reviewed_with_lock = []
     for exp in reviewed:
         month = exp.record.upload.month if exp.record.upload_id else None
@@ -106,7 +157,10 @@ def review_explanation(request, pk):
         return redirect('attendance:my_attendance')
 
     exp = get_object_or_404(
-        Explanation.objects.select_related('record__upload', 'employee', 'reason'),
+        Explanation.objects.select_related(
+            'record__upload', 'employee', 'ci_reason', 'co_reason',
+            'ci_reviewed_by', 'co_reviewed_by'
+        ),
         pk=pk
     )
 
@@ -119,16 +173,46 @@ def review_explanation(request, pk):
             return redirect('explanations:pending_approvals')
 
         action = request.POST.get('action')
+        side = request.POST.get('side')
         reviewer_note = request.POST.get('reviewer_note', '').strip()
-        if action == 'approve':
-            exp.status = Explanation.Status.APPROVED
-        elif action == 'reject':
-            exp.status = Explanation.Status.REJECTED
-        exp.reviewed_by = request.user
-        exp.reviewed_at = timezone.now()
-        exp.reviewer_note = reviewer_note
-        exp.save()
-        messages.success(request, f'Đã {"duyệt" if action == "approve" else "từ chối"} giải trình.')
+
+        if side == 'ci' and exp.has_ci_issue:
+            if action == 'reset' and exp.ci_status in (Explanation.Status.APPROVED, Explanation.Status.REJECTED):
+                exp.ci_status = Explanation.Status.PENDING
+                exp.ci_reviewed_by = None
+                exp.ci_reviewed_at = None
+                exp.ci_reviewer_note = ''
+                exp.save()
+                messages.success(request, 'Đã đặt lại CI về Chờ duyệt.')
+            elif exp.ci_status == Explanation.Status.PENDING:
+                if action == 'approve':
+                    exp.ci_status = Explanation.Status.APPROVED
+                elif action == 'reject':
+                    exp.ci_status = Explanation.Status.REJECTED
+                exp.ci_reviewed_by = request.user
+                exp.ci_reviewed_at = timezone.now()
+                exp.ci_reviewer_note = reviewer_note
+                exp.save()
+                messages.success(request, f'Đã {"duyệt" if action == "approve" else "từ chối"} giải trình Check-in.')
+        elif side == 'co' and exp.has_co_issue:
+            if action == 'reset' and exp.co_status in (Explanation.Status.APPROVED, Explanation.Status.REJECTED):
+                exp.co_status = Explanation.Status.PENDING
+                exp.co_reviewed_by = None
+                exp.co_reviewed_at = None
+                exp.co_reviewer_note = ''
+                exp.save()
+                messages.success(request, 'Đã đặt lại CO về Chờ duyệt.')
+            elif exp.co_status == Explanation.Status.PENDING:
+                if action == 'approve':
+                    exp.co_status = Explanation.Status.APPROVED
+                elif action == 'reject':
+                    exp.co_status = Explanation.Status.REJECTED
+                exp.co_reviewed_by = request.user
+                exp.co_reviewed_at = timezone.now()
+                exp.co_reviewer_note = reviewer_note
+                exp.save()
+                messages.success(request, f'Đã {"duyệt" if action == "approve" else "từ chối"} giải trình Check-out.')
+
         return redirect('explanations:pending_approvals')
 
     return render(request, 'explanations/review.html', {'exp': exp, 'locked': locked})

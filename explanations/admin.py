@@ -10,5 +10,5 @@ class ExplanationReasonAdmin(admin.ModelAdmin):
 
 @admin.register(Explanation)
 class ExplanationAdmin(admin.ModelAdmin):
-    list_display = ['employee', 'record', 'reason', 'status', 'submitted_at']
-    list_filter = ['status']
+    list_display = ['employee', 'record', 'overall_status', 'submitted_at']
+    list_filter = ['ci_status', 'co_status']

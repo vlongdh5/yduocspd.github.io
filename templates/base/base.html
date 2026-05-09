@@ -33,9 +33,12 @@
                             <li><a class="dropdown-item" href="/attendance/upload/">Upload chấm công</a></li>
                             <li><a class="dropdown-item" href="/reports/calculate/">Tính công</a></li>
                             <li><a class="dropdown-item" href="/employees/">Quản lý nhân viên</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="/accounts/config/">Cấu hình</a></li>
                         </ul>
+                    </li>
+                    {% endif %}
+                    {% if user.is_superuser %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/accounts/config/"><i class="bi bi-sliders"></i> Cấu hình</a>
                     </li>
                     {% endif %}
                 </ul>

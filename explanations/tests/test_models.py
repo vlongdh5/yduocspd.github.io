@@ -23,31 +23,76 @@ def setup(db):
 
 
 @pytest.mark.django_db
-def test_create_explanation(setup):
+def test_create_explanation_ci_side(setup):
     s = setup
     exp = Explanation.objects.create(
         record=s['record'], employee=s['emp'],
-        reason=s['reason'], note='Tôi quên chấm thẻ'
+        ci_reason=s['reason'], ci_note='Tôi quên chấm thẻ',
+        ci_status=Explanation.Status.PENDING,
     )
-    assert exp.status == Explanation.Status.PENDING
+    assert exp.has_ci_issue
+    assert not exp.has_co_issue
+    assert exp.ci_submitted
+    assert not exp.co_submitted
+    assert exp.overall_status == Explanation.Status.PENDING
 
 
 @pytest.mark.django_db
-def test_approve_explanation(setup):
+def test_approve_ci_explanation(setup):
     s = setup
-    exp = Explanation.objects.create(record=s['record'], employee=s['emp'], reason=s['reason'])
-    exp.status = Explanation.Status.APPROVED
-    exp.reviewed_by = s['tbp_user']
-    exp.reviewed_at = timezone.now()
+    exp = Explanation.objects.create(
+        record=s['record'], employee=s['emp'],
+        ci_reason=s['reason'], ci_status=Explanation.Status.PENDING,
+    )
+    exp.ci_status = Explanation.Status.APPROVED
+    exp.ci_reviewed_by = s['tbp_user']
+    exp.ci_reviewed_at = timezone.now()
     exp.save()
-    assert exp.status == Explanation.Status.APPROVED
+    assert exp.ci_status == Explanation.Status.APPROVED
+    assert exp.overall_status == Explanation.Status.APPROVED
 
 
 @pytest.mark.django_db
-def test_reject_explanation(setup):
+def test_reject_ci_explanation(setup):
     s = setup
-    exp = Explanation.objects.create(record=s['record'], employee=s['emp'], reason=s['reason'])
-    exp.status = Explanation.Status.REJECTED
-    exp.reviewer_note = 'Không hợp lệ'
+    exp = Explanation.objects.create(
+        record=s['record'], employee=s['emp'],
+        ci_reason=s['reason'], ci_status=Explanation.Status.PENDING,
+    )
+    exp.ci_status = Explanation.Status.REJECTED
+    exp.ci_reviewer_note = 'Không hợp lệ'
     exp.save()
-    assert exp.status == Explanation.Status.REJECTED
+    assert exp.ci_status == Explanation.Status.REJECTED
+    assert exp.overall_status == Explanation.Status.REJECTED
+
+
+@pytest.mark.django_db
+def test_is_fully_submitted_requires_both_when_both_issues(setup):
+    s = setup
+    # Record with both CI and CO issues
+    record2 = AttendanceRecord.objects.create(
+        upload=s['record'].upload, employee=s['emp'],
+        date=date(2026, 5, 2), status='error',
+        error_types=['LATE', 'EARLY_LEAVE']
+    )
+    reason = s['reason']
+    exp = Explanation.objects.create(
+        record=record2, employee=s['emp'],
+        ci_reason=reason, ci_status=Explanation.Status.PENDING,
+        # CO not submitted yet
+    )
+    assert exp.has_ci_issue
+    assert exp.has_co_issue
+    assert exp.ci_submitted
+    assert not exp.co_submitted
+    assert not exp.is_fully_submitted
+
+
+@pytest.mark.django_db
+def test_is_fully_reviewed_pending_when_ci_pending(setup):
+    s = setup
+    exp = Explanation.objects.create(
+        record=s['record'], employee=s['emp'],
+        ci_reason=s['reason'], ci_status=Explanation.Status.PENDING,
+    )
+    assert not exp.is_fully_reviewed

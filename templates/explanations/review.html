@@ -2,66 +2,188 @@
 {% block title %}Duyệt giải trình{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-12 col-md-7">
-        <div class="card shadow-sm">
+    <div class="col-12 col-md-8">
+        <div class="card shadow-sm mb-3">
             <div class="card-header {% if locked %}bg-secondary{% else %}bg-primary{% endif %} text-white d-flex justify-content-between align-items-center">
                 <strong>Giải trình — {{ exp.employee.full_name }}</strong>
                 {% if locked %}<span class="badge bg-light text-dark"><i class="bi bi-lock"></i> Đã chốt</span>{% endif %}
             </div>
             <div class="card-body">
-                <table class="table table-sm">
-                    <tr><th>Ngày</th><td>{{ exp.record.date }}</td></tr>
+                <table class="table table-sm mb-0">
+                    <tr><th width="140">Ngày</th><td>{{ exp.record.date }}</td></tr>
                     <tr><th>Loại lỗi</th><td>{{ exp.record.error_types|join:", " }}</td></tr>
-                    <tr><th>Lý do NV</th><td>{{ exp.reason.name }}</td></tr>
-                    <tr><th>Ghi chú</th><td>{{ exp.note|default:"-" }}</td></tr>
+                    {% if exp.record.minutes_late %}<tr><th>Đi muộn</th><td>{{ exp.record.minutes_late }} phút</td></tr>{% endif %}
+                    {% if exp.record.minutes_early %}<tr><th>Về sớm</th><td>{{ exp.record.minutes_early }} phút</td></tr>{% endif %}
                     <tr><th>Nộp lúc</th><td>{{ exp.submitted_at|date:"d/m/Y H:i" }}</td></tr>
-                    {% if exp.status != 'pending' %}
-                    <tr>
-                        <th>Trạng thái hiện tại</th>
-                        <td>
-                            {% if exp.status == 'approved' %}
-                                <span class="badge bg-success">Đã duyệt</span>
-                            {% else %}
-                                <span class="badge bg-danger">Từ chối</span>
-                            {% endif %}
-                            — {{ exp.reviewed_by.get_full_name|default:exp.reviewed_by.email }}, {{ exp.reviewed_at|date:"d/m/Y H:i" }}
-                        </td>
-                    </tr>
-                    {% if exp.reviewer_note %}
-                    <tr><th>Ghi chú TBP</th><td>{{ exp.reviewer_note }}</td></tr>
-                    {% endif %}
-                    {% endif %}
                 </table>
+            </div>
+        </div>
 
-                {% if locked %}
-                <div class="alert alert-secondary mb-3">
-                    <i class="bi bi-lock"></i> Tháng này đã được HR chốt công — không thể thay đổi phê duyệt.
-                </div>
-                <a href="/explanations/pending/" class="btn btn-outline-secondary">Quay lại</a>
+        {% if locked %}
+        <div class="alert alert-secondary">
+            <i class="bi bi-lock"></i> Tháng này đã được HR chốt công — không thể thay đổi phê duyệt.
+        </div>
+        <a href="/explanations/pending/" class="btn btn-outline-secondary">Quay lại</a>
+        {% else %}
+
+        {% if exp.has_ci_issue %}
+        <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-box-arrow-in-right"></i> Check-in</span>
+                {% if exp.ci_status == 'approved' %}
+                    <span class="badge bg-success">Đã duyệt</span>
+                {% elif exp.ci_status == 'rejected' %}
+                    <span class="badge bg-danger">Từ chối</span>
+                {% elif exp.ci_status == 'pending' %}
+                    <span class="badge bg-warning text-dark">Chờ duyệt</span>
                 {% else %}
-                <form method="post">
+                    <span class="badge bg-secondary">Chưa nộp</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if exp.ci_reason %}
+                <p class="mb-1"><strong>Lý do NV:</strong> {{ exp.ci_reason.name }}</p>
+                <p class="mb-2"><strong>Ghi chú:</strong> {{ exp.ci_note|default:"-" }}</p>
+                {% else %}
+                <p class="text-muted fst-italic mb-2">Nhân viên chưa nộp giải trình phía Check-in.</p>
+                {% endif %}
+
+                {% if exp.ci_status and exp.ci_status != 'pending' %}
+                <p class="mb-1">
+                    <strong>Kết quả:</strong>
+                    {% if exp.ci_status == 'approved' %}<span class="badge bg-success">Đã duyệt</span>
+                    {% else %}<span class="badge bg-danger">Từ chối</span>{% endif %}
+                    — {{ exp.ci_reviewed_by.get_full_name|default:exp.ci_reviewed_by.email }}, {{ exp.ci_reviewed_at|date:"d/m/Y H:i" }}
+                </p>
+                {% if exp.ci_reviewer_note %}<p class="mb-2"><strong>Ghi chú TBP:</strong> {{ exp.ci_reviewer_note }}</p>{% endif %}
+                {% endif %}
+
+                {% if exp.ci_status == 'pending' and exp.ci_reason %}
+                <form method="post" class="mt-2">
                     {% csrf_token %}
-                    <div class="mb-3">
-                        <label class="form-label">Ghi chú</label>
-                        <textarea name="reviewer_note" class="form-control" rows="2" placeholder="Lý do từ chối hoặc ghi chú thêm...">{{ exp.reviewer_note }}</textarea>
+                    <input type="hidden" name="side" value="ci">
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">Ghi chú</label>
+                        <textarea name="reviewer_note" class="form-control form-control-sm" rows="2" placeholder="Lý do từ chối hoặc ghi chú..."></textarea>
                     </div>
-                    <div class="d-flex gap-2 flex-wrap">
-                        {% if exp.status != 'approved' %}
-                        <button type="submit" name="action" value="approve" class="btn btn-success">
-                            <i class="bi bi-check-lg"></i> Duyệt
+                    <div class="d-flex gap-2">
+                        <button type="submit" name="action" value="approve" class="btn btn-sm btn-success">
+                            <i class="bi bi-check-lg"></i> Duyệt CI
+                        </button>
+                        <button type="submit" name="action" value="reject" class="btn btn-sm btn-danger">
+                            <i class="bi bi-x-lg"></i> Từ chối CI
+                        </button>
+                    </div>
+                </form>
+                {% elif exp.ci_status in 'approved,rejected' %}
+                <form method="post" class="mt-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="side" value="ci">
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">Ghi chú (chỉnh sửa)</label>
+                        <textarea name="reviewer_note" class="form-control form-control-sm" rows="2">{{ exp.ci_reviewer_note }}</textarea>
+                    </div>
+                    <div class="d-flex gap-2">
+                        {% if exp.ci_status == 'rejected' %}
+                        <button type="submit" name="action" value="approve" class="btn btn-sm btn-success">
+                            <i class="bi bi-check-lg"></i> Đổi sang Duyệt
+                        </button>
+                        {% else %}
+                        <button type="submit" name="action" value="reject" class="btn btn-sm btn-danger">
+                            <i class="bi bi-x-lg"></i> Đổi sang Từ chối
                         </button>
                         {% endif %}
-                        {% if exp.status != 'rejected' %}
-                        <button type="submit" name="action" value="reject" class="btn btn-danger">
-                            <i class="bi bi-x-lg"></i> Từ chối
+                        <button type="submit" name="action" value="reset" class="btn btn-sm btn-outline-secondary"
+                                onclick="return confirm('Đặt lại CI về Chờ duyệt?')">
+                            <i class="bi bi-arrow-counterclockwise"></i> Đặt lại
                         </button>
-                        {% endif %}
-                        <a href="/explanations/pending/" class="btn btn-outline-secondary">Quay lại</a>
                     </div>
                 </form>
                 {% endif %}
             </div>
         </div>
+        {% endif %}
+
+        {% if exp.has_co_issue %}
+        <div class="card mb-3 border-success">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-box-arrow-right"></i> Check-out</span>
+                {% if exp.co_status == 'approved' %}
+                    <span class="badge bg-light text-success">Đã duyệt</span>
+                {% elif exp.co_status == 'rejected' %}
+                    <span class="badge bg-danger">Từ chối</span>
+                {% elif exp.co_status == 'pending' %}
+                    <span class="badge bg-warning text-dark">Chờ duyệt</span>
+                {% else %}
+                    <span class="badge bg-secondary">Chưa nộp</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if exp.co_reason %}
+                <p class="mb-1"><strong>Lý do NV:</strong> {{ exp.co_reason.name }}</p>
+                <p class="mb-2"><strong>Ghi chú:</strong> {{ exp.co_note|default:"-" }}</p>
+                {% else %}
+                <p class="text-muted fst-italic mb-2">Nhân viên chưa nộp giải trình phía Check-out.</p>
+                {% endif %}
+
+                {% if exp.co_status and exp.co_status != 'pending' %}
+                <p class="mb-1">
+                    <strong>Kết quả:</strong>
+                    {% if exp.co_status == 'approved' %}<span class="badge bg-success">Đã duyệt</span>
+                    {% else %}<span class="badge bg-danger">Từ chối</span>{% endif %}
+                    — {{ exp.co_reviewed_by.get_full_name|default:exp.co_reviewed_by.email }}, {{ exp.co_reviewed_at|date:"d/m/Y H:i" }}
+                </p>
+                {% if exp.co_reviewer_note %}<p class="mb-2"><strong>Ghi chú TBP:</strong> {{ exp.co_reviewer_note }}</p>{% endif %}
+                {% endif %}
+
+                {% if exp.co_status == 'pending' and exp.co_reason %}
+                <form method="post" class="mt-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="side" value="co">
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">Ghi chú</label>
+                        <textarea name="reviewer_note" class="form-control form-control-sm" rows="2" placeholder="Lý do từ chối hoặc ghi chú..."></textarea>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" name="action" value="approve" class="btn btn-sm btn-success">
+                            <i class="bi bi-check-lg"></i> Duyệt CO
+                        </button>
+                        <button type="submit" name="action" value="reject" class="btn btn-sm btn-danger">
+                            <i class="bi bi-x-lg"></i> Từ chối CO
+                        </button>
+                    </div>
+                </form>
+                {% elif exp.co_status in 'approved,rejected' %}
+                <form method="post" class="mt-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="side" value="co">
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">Ghi chú (chỉnh sửa)</label>
+                        <textarea name="reviewer_note" class="form-control form-control-sm" rows="2">{{ exp.co_reviewer_note }}</textarea>
+                    </div>
+                    <div class="d-flex gap-2">
+                        {% if exp.co_status == 'rejected' %}
+                        <button type="submit" name="action" value="approve" class="btn btn-sm btn-success">
+                            <i class="bi bi-check-lg"></i> Đổi sang Duyệt
+                        </button>
+                        {% else %}
+                        <button type="submit" name="action" value="reject" class="btn btn-sm btn-danger">
+                            <i class="bi bi-x-lg"></i> Đổi sang Từ chối
+                        </button>
+                        {% endif %}
+                        <button type="submit" name="action" value="reset" class="btn btn-sm btn-outline-secondary"
+                                onclick="return confirm('Đặt lại CO về Chờ duyệt?')">
+                            <i class="bi bi-arrow-counterclockwise"></i> Đặt lại
+                        </button>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <a href="/explanations/pending/" class="btn btn-outline-secondary">Quay lại</a>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

@@ -9,8 +9,11 @@ class AttendanceCalculation(models.Model):
 
     employee = models.ForeignKey('employees.Employee', on_delete=models.CASCADE, related_name='calculations')
     month = models.CharField(max_length=7)
-    actual_workdays = models.DecimalField(max_digits=5, decimal_places=1, default=0)
-    leave_days_used = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    work_hours = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+    leave_hours = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+    # Legacy day-unit fields (kept for compat; = hours / 8)
+    actual_workdays = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    leave_days_used = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     calculated_at = models.DateTimeField(auto_now=True)
     calculated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)

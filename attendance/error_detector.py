@@ -50,7 +50,7 @@ def detect_errors(row: AttendanceRow, rules: dict, shift=None) -> list:
     if row.check_out is None:
         errors.append(ErrorCode.MISSING_OUT)
 
-    # LATE — so với giờ vào của ca, fallback sang rules nếu không có ca
+    # LATE — bất kỳ check_in nào sau shift_start (không có ngưỡng)
     if row.check_in:
         if shift is not None and _shift_has_clock_times(shift):
             standard_in = shift.check_in
@@ -59,12 +59,10 @@ def detect_errors(row: AttendanceRow, rules: dict, shift=None) -> list:
         else:
             standard_in = None
 
-        if standard_in:
-            threshold = rules.get('late_threshold_minutes', 15)
-            if _to_minutes(row.check_in) > _to_minutes(standard_in) + threshold:
-                errors.append(ErrorCode.LATE)
+        if standard_in and _to_minutes(row.check_in) > _to_minutes(standard_in):
+            errors.append(ErrorCode.LATE)
 
-    # EARLY_LEAVE — so với giờ ra của ca, fallback sang rules nếu không có ca
+    # EARLY_LEAVE — bất kỳ check_out nào trước shift_end (không có ngưỡng)
     if row.check_out:
         if shift is not None and _shift_has_clock_times(shift):
             standard_out = shift.check_out
@@ -73,9 +71,7 @@ def detect_errors(row: AttendanceRow, rules: dict, shift=None) -> list:
         else:
             standard_out = None
 
-        if standard_out:
-            threshold = rules.get('early_leave_threshold_minutes', 15)
-            if _to_minutes(row.check_out) < _to_minutes(standard_out) - threshold:
-                errors.append(ErrorCode.EARLY_LEAVE)
+        if standard_out and _to_minutes(row.check_out) < _to_minutes(standard_out):
+            errors.append(ErrorCode.EARLY_LEAVE)
 
     return errors

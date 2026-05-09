@@ -1,57 +1,412 @@
 {% extends "base/base.html" %}
 {% block title %}Tính công{% endblock %}
 {% block content %}
-<h4 class="mb-4"><i class="bi bi-calculator"></i> Tính toán công tháng</h4>
-<div class="card shadow-sm mb-4">
-    <div class="card-body">
-        <form method="post">
-            {% csrf_token %}
-            <div class="row align-items-end g-3">
-                <div class="col-12 col-md-4">
-                    <label class="form-label fw-bold">Chọn tháng</label>
-                    <select name="month" class="form-select" required>
-                        {% for m in months %}
-                        <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
-                        {% endfor %}
-                        {% if not months %}<option value="">-- Chưa có dữ liệu upload --</option>{% endif %}
-                    </select>
-                </div>
-                <div class="col-12 col-md-auto">
-                    <button type="submit" name="action" value="calculate" class="btn btn-primary">
-                        <i class="bi bi-play-circle"></i> Tính công
-                    </button>
-                </div>
-                {% if results %}
-                <div class="col-12 col-md-auto">
-                    <button type="submit" name="action" value="export" class="btn btn-success">
-                        <i class="bi bi-file-earmark-excel"></i> Export Excel
-                    </button>
-                </div>
-                {% endif %}
+<h4 class="mb-3"><i class="bi bi-calculator"></i> Tính toán công tháng</h4>
+
+<!-- Month selector (controls both tabs via GET) -->
+<div class="card shadow-sm mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="row align-items-center g-2" id="month-form">
+            <div class="col-auto">
+                <label class="form-label mb-0 fw-bold">Tháng:</label>
             </div>
+            <div class="col-auto">
+                <select name="month" class="form-select form-select-sm" onchange="document.getElementById('month-form').submit()">
+                    {% for m in months %}
+                    <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                    {% if not months %}<option value="">-- Chưa có dữ liệu --</option>{% endif %}
+                </select>
+            </div>
+            <input type="hidden" name="tab" value="{{ active_tab }}">
         </form>
     </div>
 </div>
 
-{% if results %}
-<h5>Kết quả tính công tháng {{ selected_month }}</h5>
-<div class="table-responsive">
-    <table class="table table-bordered table-hover">
-        <thead class="table-light">
-            <tr><th>Mã NV</th><th>Họ tên</th><th>Phòng ban</th><th>Ngày công</th><th>Ngày phép dùng</th></tr>
-        </thead>
-        <tbody>
-            {% for code, calc in results.items %}
-            <tr>
-                <td>{{ calc.employee.code }}</td>
-                <td>{{ calc.employee.full_name }}</td>
-                <td>{{ calc.employee.department.name }}</td>
-                <td class="text-center">{{ calc.actual_workdays }}</td>
-                <td class="text-center">{{ calc.leave_days_used }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endif %}
+<!-- Main tabs -->
+<ul class="nav nav-tabs mb-0" id="mainTabs" role="tablist">
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'calculate' %}active{% endif %}"
+           href="?month={{ selected_month }}&tab=calculate"
+           id="tab-calc-link">
+            <i class="bi bi-play-circle"></i> Tính công
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'explanations' %}active{% endif %}"
+           href="?month={{ selected_month }}&tab=explanations"
+           id="tab-exp-link">
+            <i class="bi bi-file-text"></i> Giải trình
+            {% if count_not_submitted %}
+                <span class="badge bg-danger ms-1" title="Chưa nộp">{{ count_not_submitted }}</span>
+            {% endif %}
+            {% if count_pending %}
+                <span class="badge bg-warning text-dark ms-1" title="Chờ duyệt">{{ count_pending }}</span>
+            {% endif %}
+        </a>
+    </li>
+</ul>
+
+<div class="tab-content border border-top-0 rounded-bottom p-3 bg-white shadow-sm">
+
+    <!-- ── Tab: Tính công ── -->
+    <div class="{% if active_tab == 'calculate' %}d-block{% else %}d-none{% endif %}">
+        <form method="post" class="mb-4">
+            {% csrf_token %}
+            <input type="hidden" name="month" value="{{ selected_month }}">
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                <button type="submit" name="action" value="calculate" class="btn btn-primary">
+                    <i class="bi bi-play-circle"></i> Tính công
+                </button>
+                <button type="submit" name="action" value="export" class="btn btn-success">
+                    <i class="bi bi-file-earmark-excel"></i> Export Excel
+                </button>
+            </div>
+        </form>
+
+        {% if results %}
+        <h6 class="text-muted mb-2">Kết quả tháng {{ selected_month }} — {{ results|length }} nhân viên</h6>
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover table-sm">
+                <thead class="table-light">
+                    <tr>
+                        <th>Mã NV</th><th>Họ tên</th><th>Phòng ban</th>
+                        <th class="text-center">Giờ công</th>
+                        <th class="text-center">Giờ phép</th>
+                        <th class="text-center">Ngày công (÷8)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for code, calc in results.items %}
+                    <tr>
+                        <td>{{ calc.employee.code }}</td>
+                        <td>{{ calc.employee.full_name }}</td>
+                        <td>{{ calc.employee.department.name }}</td>
+                        <td class="text-center">{{ calc.work_hours }}</td>
+                        <td class="text-center">{{ calc.leave_hours }}</td>
+                        <td class="text-center">{{ calc.actual_workdays }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted">Chọn tháng rồi bấm <strong>Tính công</strong> để xem kết quả.</p>
+        {% endif %}
+    </div>
+
+    <!-- ── Tab: Giải trình ── -->
+    <div class="{% if active_tab == 'explanations' %}d-block{% else %}d-none{% endif %}">
+
+        <!-- Badges cảnh báo -->
+        {% if count_not_submitted or count_pending %}
+        <div class="d-flex gap-2 flex-wrap mb-3">
+            {% if count_not_submitted %}
+            <span class="badge fs-6 bg-danger">
+                <i class="bi bi-exclamation-circle"></i>
+                {{ count_not_submitted }} bản ghi chưa nộp giải trình
+            </span>
+            {% endif %}
+            {% if count_pending %}
+            <span class="badge fs-6 bg-warning text-dark">
+                <i class="bi bi-hourglass-split"></i>
+                {{ count_pending }} giải trình chờ duyệt
+            </span>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="alert alert-success py-2 mb-3">
+            <i class="bi bi-check-circle"></i> Tất cả bản ghi lỗi đã được giải trình và phê duyệt.
+        </div>
+        {% endif %}
+
+        <!-- Sub-tabs -->
+        <ul class="nav nav-pills mb-3" id="expSubTabs">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#sub-need-action">
+                    Cần xử lý
+                    {% if count_not_submitted or count_pending %}
+                    <span class="badge bg-danger ms-1">{{ count_not_submitted|add:count_pending }}</span>
+                    {% endif %}
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#sub-all">
+                    Toàn bộ
+                    {% if count_all_errors %}<span class="badge bg-secondary ms-1">{{ count_all_errors }}</span>{% endif %}
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+
+            <!-- Sub-tab: Cần xử lý -->
+            <div class="tab-pane fade show active" id="sub-need-action">
+
+                <!-- Nhóm: Chưa nộp -->
+                <h6 class="text-danger mb-2"><i class="bi bi-x-circle"></i> Chưa nộp giải trình
+                    <span class="badge bg-danger ms-1">{{ not_submitted|length }}</span>
+                </h6>
+                {% if not_submitted %}
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-danger">
+                            <tr>
+                                <th>Mã NV</th><th>Họ tên</th><th>Phòng ban</th>
+                                <th>Ngày</th><th>Lỗi</th>
+                                <th class="text-center">CI</th><th class="text-center">CO</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in not_submitted %}
+                            {% with exp=record.explanation %}
+                            <tr>
+                                <td>{{ record.employee.code }}</td>
+                                <td>{{ record.employee.full_name }}</td>
+                                <td>{{ record.employee.department.name }}</td>
+                                <td>{{ record.date|date:"d/m/Y" }}</td>
+                                <td><small class="text-muted">{{ record.error_types|join:", " }}</small></td>
+                                <td class="text-center">
+                                    {% if record.has_ci_issue %}
+                                        {% if exp and exp.ci_reason %}
+                                            <span class="badge bg-secondary">{{ exp.ci_reason.name }}</span>
+                                        {% else %}
+                                            <span class="text-danger small fw-bold">Chưa nộp</span>
+                                        {% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if record.has_co_issue %}
+                                        {% if exp and exp.co_reason %}
+                                            <span class="badge bg-secondary">{{ exp.co_reason.name }}</span>
+                                        {% else %}
+                                            <span class="text-danger small fw-bold">Chưa nộp</span>
+                                        {% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-4">Không có bản ghi nào chưa nộp.</p>
+                {% endif %}
+
+                <!-- Nhóm: Chờ duyệt -->
+                <h6 class="text-warning mb-2"><i class="bi bi-hourglass-split"></i> Chờ TBP phê duyệt
+                    <span class="badge bg-warning text-dark ms-1">{{ pending|length }}</span>
+                </h6>
+                {% if pending %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-warning">
+                            <tr>
+                                <th>Mã NV</th><th>Họ tên</th><th>Phòng ban</th>
+                                <th>Ngày</th><th>Lỗi</th>
+                                <th class="text-center">CI</th><th class="text-center">CO</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in pending %}
+                            {% with exp=record.explanation %}
+                            <tr>
+                                <td>{{ record.employee.code }}</td>
+                                <td>{{ record.employee.full_name }}</td>
+                                <td>{{ record.employee.department.name }}</td>
+                                <td>{{ record.date|date:"d/m/Y" }}</td>
+                                <td><small class="text-muted">{{ record.error_types|join:", " }}</small></td>
+                                <td class="text-center">
+                                    {% if record.has_ci_issue %}
+                                        {% if exp.ci_status == 'pending' %}
+                                            <span class="badge bg-warning text-dark">Chờ duyệt</span>
+                                            {% if exp.ci_reason %}<small class="d-block text-muted">{{ exp.ci_reason.name }}</small>{% endif %}
+                                        {% elif exp.ci_status == 'approved' %}
+                                            <span class="badge bg-success">Đã duyệt</span>
+                                        {% elif exp.ci_status == 'rejected' %}
+                                            <span class="badge bg-danger">Từ chối</span>
+                                        {% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if record.has_co_issue %}
+                                        {% if exp.co_status == 'pending' %}
+                                            <span class="badge bg-warning text-dark">Chờ duyệt</span>
+                                            {% if exp.co_reason %}<small class="d-block text-muted">{{ exp.co_reason.name }}</small>{% endif %}
+                                        {% elif exp.co_status == 'approved' %}
+                                            <span class="badge bg-success">Đã duyệt</span>
+                                        {% elif exp.co_status == 'rejected' %}
+                                            <span class="badge bg-danger">Từ chối</span>
+                                        {% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td>
+                                    {% if exp %}<a href="/explanations/review/{{ exp.pk }}/" class="btn btn-sm btn-outline-primary">Xem</a>{% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted small">Không có giải trình nào đang chờ duyệt.</p>
+                {% endif %}
+            </div>
+
+            <!-- Sub-tab: Toàn bộ -->
+            <div class="tab-pane fade" id="sub-all">
+
+                <!-- Chưa nộp -->
+                <h6 class="text-danger mb-2"><i class="bi bi-x-circle"></i> Chưa nộp
+                    <span class="badge bg-danger ms-1">{{ not_submitted|length }}</span>
+                </h6>
+                {% if not_submitted %}
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-danger">
+                            <tr>
+                                <th>Mã NV</th><th>Họ tên</th><th>Phòng ban</th>
+                                <th>Ngày</th><th>Lỗi</th>
+                                <th class="text-center">CI</th><th class="text-center">CO</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in not_submitted %}
+                            {% with exp=record.explanation %}
+                            <tr>
+                                <td>{{ record.employee.code }}</td>
+                                <td>{{ record.employee.full_name }}</td>
+                                <td>{{ record.employee.department.name }}</td>
+                                <td>{{ record.date|date:"d/m/Y" }}</td>
+                                <td><small class="text-muted">{{ record.error_types|join:", " }}</small></td>
+                                <td class="text-center">
+                                    {% if record.has_ci_issue %}
+                                        {% if exp and exp.ci_reason %}<span class="badge bg-secondary">{{ exp.ci_reason.name }}</span>
+                                        {% else %}<span class="text-danger small fw-bold">Chưa nộp</span>{% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if record.has_co_issue %}
+                                        {% if exp and exp.co_reason %}<span class="badge bg-secondary">{{ exp.co_reason.name }}</span>
+                                        {% else %}<span class="text-danger small fw-bold">Chưa nộp</span>{% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-4">Không có.</p>
+                {% endif %}
+
+                <!-- Chờ duyệt -->
+                <h6 class="text-warning mb-2"><i class="bi bi-hourglass-split"></i> Chờ duyệt
+                    <span class="badge bg-warning text-dark ms-1">{{ pending|length }}</span>
+                </h6>
+                {% if pending %}
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-warning">
+                            <tr>
+                                <th>Mã NV</th><th>Họ tên</th><th>Phòng ban</th>
+                                <th>Ngày</th><th>Lỗi</th>
+                                <th class="text-center">CI</th><th class="text-center">CO</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in pending %}
+                            {% with exp=record.explanation %}
+                            <tr>
+                                <td>{{ record.employee.code }}</td>
+                                <td>{{ record.employee.full_name }}</td>
+                                <td>{{ record.employee.department.name }}</td>
+                                <td>{{ record.date|date:"d/m/Y" }}</td>
+                                <td><small class="text-muted">{{ record.error_types|join:", " }}</small></td>
+                                <td class="text-center">
+                                    {% if record.has_ci_issue %}
+                                        {% if exp.ci_status == 'pending' %}<span class="badge bg-warning text-dark">Chờ duyệt</span>
+                                        {% elif exp.ci_status == 'approved' %}<span class="badge bg-success">Đã duyệt</span>
+                                        {% elif exp.ci_status == 'rejected' %}<span class="badge bg-danger">Từ chối</span>{% endif %}
+                                        {% if exp.ci_reason %}<small class="d-block text-muted">{{ exp.ci_reason.name }}</small>{% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if record.has_co_issue %}
+                                        {% if exp.co_status == 'pending' %}<span class="badge bg-warning text-dark">Chờ duyệt</span>
+                                        {% elif exp.co_status == 'approved' %}<span class="badge bg-success">Đã duyệt</span>
+                                        {% elif exp.co_status == 'rejected' %}<span class="badge bg-danger">Từ chối</span>{% endif %}
+                                        {% if exp.co_reason %}<small class="d-block text-muted">{{ exp.co_reason.name }}</small>{% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td>{% if exp %}<a href="/explanations/review/{{ exp.pk }}/" class="btn btn-sm btn-outline-primary">Xem</a>{% endif %}</td>
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-4">Không có.</p>
+                {% endif %}
+
+                <!-- Đã xử lý -->
+                <h6 class="text-success mb-2"><i class="bi bi-check-circle"></i> Đã xử lý
+                    <span class="badge bg-success ms-1">{{ reviewed|length }}</span>
+                </h6>
+                {% if reviewed %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-success">
+                            <tr>
+                                <th>Mã NV</th><th>Họ tên</th><th>Phòng ban</th>
+                                <th>Ngày</th><th>Lỗi</th>
+                                <th class="text-center">CI</th><th class="text-center">CO</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in reviewed %}
+                            {% with exp=record.explanation %}
+                            <tr>
+                                <td>{{ record.employee.code }}</td>
+                                <td>{{ record.employee.full_name }}</td>
+                                <td>{{ record.employee.department.name }}</td>
+                                <td>{{ record.date|date:"d/m/Y" }}</td>
+                                <td><small class="text-muted">{{ record.error_types|join:", " }}</small></td>
+                                <td class="text-center">
+                                    {% if record.has_ci_issue %}
+                                        {% if exp.ci_status == 'approved' %}<span class="badge bg-success">Đã duyệt</span>
+                                        {% elif exp.ci_status == 'rejected' %}<span class="badge bg-danger">Từ chối</span>{% endif %}
+                                        {% if exp.ci_reason %}<small class="d-block text-muted">{{ exp.ci_reason.name }}</small>{% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if record.has_co_issue %}
+                                        {% if exp.co_status == 'approved' %}<span class="badge bg-success">Đã duyệt</span>
+                                        {% elif exp.co_status == 'rejected' %}<span class="badge bg-danger">Từ chối</span>{% endif %}
+                                        {% if exp.co_reason %}<small class="d-block text-muted">{{ exp.co_reason.name }}</small>{% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td>{% if exp %}<a href="/explanations/review/{{ exp.pk }}/" class="btn btn-sm btn-outline-secondary">Xem</a>{% endif %}</td>
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted small">Chưa có giải trình nào được xử lý.</p>
+                {% endif %}
+
+            </div><!-- /sub-all -->
+        </div><!-- /tab-content pills -->
+    </div><!-- /explanations tab -->
+
+</div><!-- /main tab-content -->
 {% endblock %}
