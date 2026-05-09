@@ -1,0 +1,25 @@
+let
+    Source = Excel.CurrentWorkbook(){[Name="mcc"]}[Content],
+    #"Replaced Value" = Table.ReplaceValue(Source,"NA",0,Replacer.ReplaceValue,{"Giờ bắt đầu nghỉ trưa", "Giờ kết thúc nghỉ trưa"}),
+    #"Changed Type" = Table.TransformColumnTypes(#"Replaced Value",{{"Mã nhân viên", type text}, {"Tên", type text}, {"Họ và tên", type text}, {"Ngày công", type text}, {"Phòng ban", type text}, {"Ca làm việc đăng ký", type text}, {"Giờ vào theo ca đăng ký", type time}, {"Giờ ra theo ca đăng ký", type time}, {"Giờ bắt đầu nghỉ trưa", type time}, {"Giờ kết thúc nghỉ trưa", type time}, {"Giờ vào Máy chấm công", type datetime}, {"Giờ ra Máy chấm công", type datetime}}),
+    #"Changed Type1" = Table.TransformColumns(#"Changed Type",{{"Giờ vào Máy chấm công",each if _ = null then null else #time(Time.Hour(_), Time.Minute(_), 0), type time}, {"Giờ ra Máy chấm công", each if _ = null then null else #time(Time.Hour(_), Time.Minute(_), 0), type time}}),
+    #"Added Custom" = Table.AddColumn(#"Changed Type1", "Số phút đi muộn", each if [Giờ vào Máy chấm công] = null then null
+else if  Number.Round(Duration.TotalMinutes(Time.From([Giờ vào theo ca đăng ký]) - Time.From([Giờ vào Máy chấm công])),0) >=0 then 0 else Number.Round(Duration.TotalMinutes(Time.From([Giờ vào theo ca đăng ký]) - Time.From([Giờ vào Máy chấm công])),0)),
+    #"Added Custom1" = Table.AddColumn(#"Added Custom", "Số phút về sớm", each if [Giờ ra Máy chấm công]= null then null else 
+if Number.Round(Duration.TotalMinutes(Time.From([Giờ ra Máy chấm công]) - Time.From([Giờ ra theo ca đăng ký])),0) >= 0 then 0 else Number.Round(Duration.TotalMinutes(Time.From([Giờ ra Máy chấm công]) - Time.From([Giờ ra theo ca đăng ký])),0)),
+    #"Added Custom2" = Table.AddColumn(#"Added Custom1", "Giải trình", each if [Ca làm việc đăng ký] = "Nghỉ phép/bù cả ngày" or [Ca làm việc đăng ký] = "Nghỉ tuần theo lịch" then "OFF"
+else if [Ca làm việc đăng ký] = "ONLINE" then "ONL" 
+else if ([Số phút đi muộn] = null or [Số phút đi muộn] < 0) and ([Số phút về sớm] = null or [Số phút về sớm] < 0)
+then "YES/ALL"
+else if [Số phút đi muộn] = null or [Số phút đi muộn] < 0
+then "YES/CI"
+else if [Số phút về sớm] = null or [Số phút về sớm] < 0 then "YES/CO" 
+else "NO"),
+    #"Added Custom3" = Table.AddColumn(#"Added Custom2", "Thứ", each Date.ToText(Date.FromText([Ngày công], "vi-VN"), "dddd", "vi-VN")),
+    #"Reordered Columns" = Table.ReorderColumns(#"Added Custom3",{"Mã nhân viên", "Tên", "Họ và tên", "Ngày công", "Thứ", "Phòng ban", "Ca làm việc đăng ký", "Giờ vào theo ca đăng ký", "Giờ ra theo ca đăng ký", "Giờ bắt đầu nghỉ trưa", "Giờ kết thúc nghỉ trưa", "Giờ vào Máy chấm công", "Giờ ra Máy chấm công", "Số phút đi muộn", "Số phút về sớm", "Giải trình"}),
+    #"Sorted Rows" = Table.Sort(#"Reordered Columns",{{"Mã nhân viên", Order.Ascending}, {"Ngày công", Order.Ascending}}),
+    #"Added Custom4" = Table.AddColumn(#"Sorted Rows", "Custom", each [Mã nhân viên] & Text.From(Number.From(Date.FromText([Ngày công], "vi-VN")))),
+    #"Reordered Columns1" = Table.ReorderColumns(#"Added Custom4",{"Custom", "Mã nhân viên", "Tên", "Họ và tên", "Ngày công", "Thứ", "Phòng ban", "Ca làm việc đăng ký", "Giờ vào theo ca đăng ký", "Giờ ra theo ca đăng ký", "Giờ bắt đầu nghỉ trưa", "Giờ kết thúc nghỉ trưa", "Giờ vào Máy chấm công", "Giờ ra Máy chấm công", "Số phút đi muộn", "Số phút về sớm", "Giải trình"}),
+    #"Changed Type2" = Table.TransformColumnTypes(#"Reordered Columns1",{{"Custom", type text}})
+in
+    #"Changed Type2"

@@ -1,11 +1,15 @@
 from .production import *
+import os
 
-# Django chạy sau Nginx — đọc X-Forwarded-Proto để biết scheme thật
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-# Không self-redirect HTTPS — Nginx đã xử lý
 SECURE_SSL_REDIRECT = False
-
-# Cookie secure vẫn bật (Nginx forward đúng scheme)
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
+
+_extra = [o.strip() for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.trycloudflare.com',
+    'https://*.ngrok-free.dev',
+    'https://*.ngrok-free.app',
+    'https://localhost',
+] + _extra

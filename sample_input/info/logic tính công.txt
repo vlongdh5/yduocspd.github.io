@@ -1,0 +1,54 @@
+let
+    Source = Excel.CurrentWorkbook(){[Name="Giải_trình"]}[Content],
+    #"Replaced Value1" = Table.ReplaceValue(Source,"",null,Replacer.ReplaceValue,{"Phân loại - CI", "Phê duyệt - CI", "Phân loại - CO", "Phê duyệt - CO"}),
+    #"Changed Type" = Table.TransformColumnTypes(#"Replaced Value1",{{"Mã nhân viên",type text }, {"Tên", type text}, {"Họ và tên", type text}, {"Ngày công", type text}, {"Phòng ban", type text}, {"Ca làm việc đăng ký", type text}, {"Giờ vào theo ca đăng ký", type time}, {"Giờ ra theo ca đăng ký", type time}, {"Giờ bắt đầu nghỉ trưa", type time}, {"Giờ kết thúc nghỉ trưa", type time}, {"Giờ vào Máy chấm công", type time}, {"Giờ ra Máy chấm công", type time}, {"Số phút đi muộn", type number}, {"Số phút về sớm", type number}, {"Giải trình", type text}, {"Phân loại - CI", type text}, {"Phê duyệt - CI", type text}, {"Phân loại - CO", type text}, {"Phê duyệt - CO", type text}}),
+    #"Added Custom10" = Table.AddColumn(#"Changed Type", "Key_QCC", each Text.From([Mã nhân viên])&Text.From([Ngày công])),
+    #"Sorted Rows1" = Table.Sort(#"Added Custom10",{{"Mã nhân viên", Order.Ascending}, {"Ngày công", Order.Ascending}}),
+    #"Added Custom" = Table.AddColumn(#"Sorted Rows1", "Key_CI", each [#"Phân loại - CI"]&[#"Phê duyệt - CI"]),
+    #"Added Custom1" = Table.AddColumn(#"Added Custom", "Key_CO", each [#"Phân loại - CO"]&[#"Phê duyệt - CO"]),
+    #"Merged Queries" = Table.NestedJoin(#"Added Custom1", {"Ca làm việc đăng ký"}, masterdata, {"Ký hiệu ca"}, "masterdata", JoinKind.LeftOuter),
+    #"Expanded masterdata1" = Table.ExpandTableColumn(#"Merged Queries", "masterdata", {"Giờ công", "Giờ phép"}, {"Công", "Phép"}),
+    #"Merged Queries1" = Table.NestedJoin(#"Expanded masterdata1", {"Key_CI"}, #"phân loại", {"Key"}, "phân loại", JoinKind.LeftOuter),
+    #"Expanded phân loại" = Table.ExpandTableColumn(#"Merged Queries1", "phân loại", {"Kết quả"}, {"Kết quả_CI"}),
+    #"Merged Queries2" = Table.NestedJoin(#"Expanded phân loại", {"Key_CO"}, #"phân loại", {"Key"}, "phân loại", JoinKind.LeftOuter),
+    #"Expanded phân loại1" = Table.ExpandTableColumn(#"Merged Queries2", "phân loại", {"Kết quả"}, {"Kết quả_CO"}),
+    #"Replaced Value" = Table.ReplaceValue(#"Expanded phân loại1",null,"Không",Replacer.ReplaceValue,{"Kết quả_CI", "Kết quả_CO"}),
+    #"Added Custom8" = Table.AddColumn(#"Replaced Value", "check_ci_2", each if [Giờ vào Máy chấm công] <> null and Number.Round(Duration.TotalMinutes([Giờ kết thúc nghỉ trưa]-[Giờ vào Máy chấm công]),0) < 0 then Number.Round(Duration.TotalMinutes([Giờ kết thúc nghỉ trưa]-[Giờ vào Máy chấm công]),0) 
+else 0),
+    #"Added Custom9" = Table.AddColumn(#"Added Custom8", "check_co_2", each if [Giờ ra Máy chấm công] <> null and  Number.Round(Duration.TotalMinutes([Giờ ra Máy chấm công]-[Giờ bắt đầu nghỉ trưa]),0) < 0 then Number.Round(Duration.TotalMinutes([Giờ ra Máy chấm công]-[Giờ bắt đầu nghỉ trưa]),0) else 0),
+    #"Added Custom12" = Table.AddColumn(#"Added Custom9", "check_ci_3", each Number.Round(Duration.TotalMinutes([Giờ vào theo ca đăng ký]-[Giờ bắt đầu nghỉ trưa]),0)),
+    #"Added Custom13" = Table.AddColumn(#"Added Custom12", "check_co_3", each Number.Round(Duration.TotalMinutes([Giờ kết thúc nghỉ trưa]-[Giờ ra theo ca đăng ký]),0)),
+    #"Merged Queries3" = Table.NestedJoin(#"Added Custom13", {"Key_QCC"}, #"Quên chấm công", {"Key_QCC"}, "Quên chấm công", JoinKind.LeftOuter),
+    #"Expanded Quên chấm công" = Table.ExpandTableColumn(#"Merged Queries3", "Quên chấm công", {"Thứ tự"}, {"ĐC_QCC"}),
+    #"Added Custom2" = Table.AddColumn(#"Expanded Quên chấm công", "ĐC_Công_CI", each if [Kết quả_CI] = "Công" then 0 
+else if [Kết quả_CI] = "Nghỉ" then 0 
+else if [Kết quả_CI] = "Không" then [Số phút đi muộn]
+else if [Kết quả_CI] = "Phép" then [Số phút đi muộn]
+else if ([Kết quả_CI] = "Phép2" or [Kết quả_CI] = "Không2")  then [check_ci_2] + [check_ci_3] 
+else 0),
+    #"Added Custom3" = Table.AddColumn(#"Added Custom2", "ĐC_Phép_CI", each if [Kết quả_CI] = "Công" then 0 
+else if [Kết quả_CI] = "Nghỉ" then 0 
+else if [Kết quả_CI] = "Phép" then -[Số phút đi muộn]
+else if [Kết quả_CI] = "Phép2" then -[check_ci_2] - [check_ci_3] 
+else if ([Kết quả_CI] = "Không2" or [Kết quả_CI] = "Không")  then 0
+else 0),
+    #"Added Custom4" = Table.AddColumn(#"Added Custom3", "ĐC_Công_CO", each if [Kết quả_CO] = "Công" then 0 
+else if [Kết quả_CO] = "Nghỉ" then 0 
+else if [Kết quả_CO] = "Phép" then [Số phút về sớm]
+else if [Kết quả_CO] = "Không" then [Số phút về sớm]
+else if ([Kết quả_CO] = "Phép2" or [Kết quả_CO] = "Không2") then [check_co_2] + [check_co_3] 
+else 0),
+    #"Added Custom5" = Table.AddColumn(#"Added Custom4", "ĐC_Phép_CO", each if [Kết quả_CO] = "Công" then 0 
+else if [Kết quả_CO] = "Nghỉ" then 0 
+else if [Kết quả_CO] = "Phép" then -[Số phút về sớm]
+else if [Kết quả_CO] = "Phép2" then -[check_co_2] - [check_co_3] 
+else if ([Kết quả_CO] = "Không2" or [Kết quả_CO] = "Không") then 0
+else 0),
+    #"Added Custom6" = Table.AddColumn(#"Added Custom5", "Công_F", each if [Kết quả_CI] = "Nghỉ" and [Kết quả_CO] = "Nghỉ" then 0 
+else if [ĐC_QCC] <> null then Number.Round(([Công]+[ĐC_Công_CI]/60+[ĐC_Công_CO]/60)/2,2) else if Number.Round([Công]+[ĐC_Công_CI]/60+[ĐC_Công_CO]/60,2)< 0 then 0
+else Number.Round([Công]+[ĐC_Công_CI]/60+[ĐC_Công_CO]/60,2)),
+    #"Added Custom7" = Table.AddColumn(#"Added Custom6", "Phép_F", each if [ĐC_QCC] = null then Number.Round([Phép]+[ĐC_Phép_CI]/60+[ĐC_Phép_CO]/60,2) else Number.Round([Phép]+[ĐC_Phép_CI]/60+[ĐC_Phép_CO]/60,2) + Number.Round(([Công]+[ĐC_Công_CI]/60+[ĐC_Công_CO]/60)/2,2)),
+    #"Removed Columns" = Table.RemoveColumns(#"Added Custom7",{"Key_QCC", "Key_CI", "Key_CO", "check_ci_2", "check_co_2", "check_ci_3", "check_co_3", "Tên", "Giờ bắt đầu nghỉ trưa", "Giờ kết thúc nghỉ trưa", "Công", "Phép", "Kết quả_CI", "Kết quả_CO", "ĐC_QCC", "ĐC_Công_CI", "ĐC_Phép_CI", "ĐC_Công_CO", "ĐC_Phép_CO"}),
+    #"Renamed Columns" = Table.RenameColumns(#"Removed Columns",{{"Phân loại - CI", "Giải trình Checkin"}, {"Phê duyệt - CI", "Phê duyệt Checkin"}, {"Phân loại - CO", "Giải trình Checkout"}, {"Phê duyệt - CO", "Phê duyệt Checkout"}})
+in
+    #"Renamed Columns"
