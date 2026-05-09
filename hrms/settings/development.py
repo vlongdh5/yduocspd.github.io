@@ -1,3 +1,6 @@
+import os, sys
+os.environ.setdefault('SECRET_KEY', 'dev-only-secret-key-not-for-production')
+
 from .base import *
 
 DEBUG = True

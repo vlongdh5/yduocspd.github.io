@@ -2,9 +2,30 @@ from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 from django.views import View
 from django.contrib import messages
+from django.core.cache import cache
 from .forms import LoginForm, OTPVerifyForm
 from .otp import is_otp_enabled, TOTPManager
 from .models import User
+
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_LOCKOUT_SECONDS = 900   # 15 phút
+_OTP_MAX_ATTEMPTS = 5
+_OTP_LOCKOUT_SECONDS = 600     # 10 phút
+
+
+def _client_ip(request):
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+    return forwarded.split(',')[0].strip() if forwarded else request.META.get('REMOTE_ADDR', '')
+
+
+def _is_locked(key):
+    return cache.get(key, 0) >= _LOGIN_MAX_ATTEMPTS
+
+
+def _record_failure(key, ttl):
+    count = cache.get(key, 0) + 1
+    cache.set(key, count, ttl)
+    return count
 
 
 class LoginView(View):
@@ -16,6 +37,13 @@ class LoginView(View):
         return render(request, self.template_name, {'form': LoginForm()})
 
     def post(self, request):
+        ip = _client_ip(request)
+        lock_key = f'login_lock_{ip}'
+
+        if _is_locked(lock_key):
+            messages.error(request, 'Đăng nhập bị tạm khóa 15 phút do thử sai quá nhiều lần.')
+            return render(request, self.template_name, {'form': LoginForm(), 'locked': True})
+
         form = LoginForm(request.POST)
         if not form.is_valid():
             return render(request, self.template_name, {'form': form})
@@ -26,8 +54,15 @@ class LoginView(View):
             password=form.cleaned_data['password']
         )
         if user is None:
-            messages.error(request, 'Email hoặc mật khẩu không đúng.')
+            count = _record_failure(lock_key, _LOGIN_LOCKOUT_SECONDS)
+            remaining = max(0, _LOGIN_MAX_ATTEMPTS - count)
+            if remaining:
+                messages.error(request, f'Email hoặc mật khẩu không đúng. Còn {remaining} lần thử.')
+            else:
+                messages.error(request, 'Đăng nhập bị tạm khóa 15 phút do thử sai quá nhiều lần.')
             return render(request, self.template_name, {'form': form})
+
+        cache.delete(lock_key)  # reset on success
 
         if is_otp_enabled():
             request.session['pre_otp_user_id'] = user.pk
@@ -60,11 +95,20 @@ class OTPVerifyView(View):
     def post(self, request):
         if 'pre_otp_user_id' not in request.session:
             return redirect('accounts:login')
+
+        ip = _client_ip(request)
+        user_id = request.session['pre_otp_user_id']
+        otp_key = f'otp_lock_{ip}_{user_id}'
+
+        if cache.get(otp_key, 0) >= _OTP_MAX_ATTEMPTS:
+            messages.error(request, 'OTP bị tạm khóa 10 phút do thử sai quá nhiều lần.')
+            del request.session['pre_otp_user_id']
+            return redirect('accounts:login')
+
         form = OTPVerifyForm(request.POST)
         if not form.is_valid():
             return render(request, self.template_name, {'form': form})
 
-        user_id = request.session['pre_otp_user_id']
         user = User.objects.get(pk=user_id)
         code = form.cleaned_data['otp_code']
         method = request.session.get('otp_method', 'email')
@@ -81,10 +125,12 @@ class OTPVerifyView(View):
                 pass
 
         if verified:
+            cache.delete(otp_key)
             del request.session['pre_otp_user_id']
             login(request, user)
             return redirect(request.GET.get('next', '/'))
 
+        _record_failure(otp_key, _OTP_LOCKOUT_SECONDS)
         messages.error(request, 'Mã OTP không đúng hoặc đã hết hạn.')
         return render(request, self.template_name, {'form': form, 'method': method})
 
