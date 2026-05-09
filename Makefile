@@ -28,26 +28,28 @@ prod:
 	DJANGO_SETTINGS_MODULE=hrms.settings.production .venv/bin/gunicorn hrms.wsgi:application -c gunicorn.conf.py
 
 # ── Docker ────────────────────────────────────────────────────────────────────
+DC = docker compose --env-file .env.docker
+
 docker-build:
-	docker compose build
+	$(DC) build
 
 docker-up:
-	docker compose up -d
+	$(DC) up -d
 
 docker-down:
-	docker compose down
+	$(DC) down
 
 docker-logs:
-	docker compose logs -f web
+	$(DC) logs -f web
 
 docker-logs-nginx:
-	docker compose logs -f nginx
+	$(DC) logs -f nginx
 
 docker-shell:
-	docker compose exec web python manage.py shell
+	$(DC) exec web python manage.py shell
 
 docker-reset:
-	docker compose down -v && docker compose up -d
+	$(DC) down -v && $(DC) up -d
 
 docker-cert-selfsigned:
 	openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
