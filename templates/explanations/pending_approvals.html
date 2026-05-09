@@ -21,57 +21,79 @@
 <div class="tab-content">
     <!-- Tab chờ duyệt -->
     <div class="tab-pane fade show active" id="tab-pending">
-        <div class="table-responsive">
-            <table class="table table-bordered table-hover">
-                <thead class="table-light">
-                    <tr>
-                        <th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th><th>Lỗi</th>
-                        <th>CI</th><th>CO</th><th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for exp in pending %}
-                    <tr>
-                        <td>{{ exp.employee.full_name }}</td>
-                        <td>{{ exp.employee.department.name }}</td>
-                        <td>{{ exp.record.date }}</td>
-                        <td><small>{{ exp.record.error_types|join:", " }}</small></td>
-                        <td>
-                            {% if exp.has_ci_issue %}
-                                {% if exp.ci_status == 'pending' %}
-                                    <span class="badge bg-warning text-dark">Chờ duyệt</span>
-                                    {% if exp.ci_reason %}<small class="d-block text-muted">{{ exp.ci_reason.name }}</small>{% endif %}
-                                {% elif exp.ci_status == 'approved' %}
-                                    <span class="badge bg-success">Đã duyệt</span>
-                                {% elif exp.ci_status == 'rejected' %}
-                                    <span class="badge bg-danger">Từ chối</span>
-                                {% else %}
-                                    <span class="text-muted small">Chưa nộp</span>
-                                {% endif %}
-                            {% else %}—{% endif %}
-                        </td>
-                        <td>
-                            {% if exp.has_co_issue %}
-                                {% if exp.co_status == 'pending' %}
-                                    <span class="badge bg-warning text-dark">Chờ duyệt</span>
-                                    {% if exp.co_reason %}<small class="d-block text-muted">{{ exp.co_reason.name }}</small>{% endif %}
-                                {% elif exp.co_status == 'approved' %}
-                                    <span class="badge bg-success">Đã duyệt</span>
-                                {% elif exp.co_status == 'rejected' %}
-                                    <span class="badge bg-danger">Từ chối</span>
-                                {% else %}
-                                    <span class="text-muted small">Chưa nộp</span>
-                                {% endif %}
-                            {% else %}—{% endif %}
-                        </td>
-                        <td><a href="/explanations/review/{{ exp.pk }}/" class="btn btn-sm btn-primary">Xem & Duyệt</a></td>
-                    </tr>
-                    {% empty %}
-                    <tr><td colspan="7" class="text-center text-muted py-4">Không có giải trình nào chờ duyệt</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <form method="post" action="/explanations/bulk-review/" id="bulkForm">
+            {% csrf_token %}
+            {% if pending %}
+            <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAll()">
+                    <i class="bi bi-check2-square"></i> Chọn tất cả
+                </button>
+                <button type="submit" name="action" value="approve" class="btn btn-sm btn-success"
+                        onclick="return confirmBulk('phê duyệt')">
+                    <i class="bi bi-check-lg"></i> Phê duyệt đã chọn
+                </button>
+                <button type="submit" name="action" value="reject" class="btn btn-sm btn-danger"
+                        onclick="return confirmBulk('từ chối')">
+                    <i class="bi bi-x-lg"></i> Từ chối đã chọn
+                </button>
+            </div>
+            {% endif %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:36px"></th>
+                            <th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th><th>Lỗi</th>
+                            <th>CI</th><th>CO</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for exp in pending %}
+                        <tr>
+                            <td class="text-center">
+                                <input type="checkbox" name="exp_ids" value="{{ exp.pk }}" class="form-check-input bulk-cb">
+                            </td>
+                            <td>{{ exp.employee.full_name }}</td>
+                            <td>{{ exp.employee.department.name }}</td>
+                            <td>{{ exp.record.date }}</td>
+                            <td><small>{{ exp.record.error_types|join:", " }}</small></td>
+                            <td>
+                                {% if exp.has_ci_issue %}
+                                    {% if exp.ci_status == 'pending' %}
+                                        <span class="badge bg-warning text-dark">Chờ duyệt</span>
+                                        {% if exp.ci_reason %}<small class="d-block text-muted">{{ exp.ci_reason.name }}</small>{% endif %}
+                                    {% elif exp.ci_status == 'approved' %}
+                                        <span class="badge bg-success">Đã duyệt</span>
+                                    {% elif exp.ci_status == 'rejected' %}
+                                        <span class="badge bg-danger">Từ chối</span>
+                                    {% else %}
+                                        <span class="text-muted small">Chưa nộp</span>
+                                    {% endif %}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>
+                                {% if exp.has_co_issue %}
+                                    {% if exp.co_status == 'pending' %}
+                                        <span class="badge bg-warning text-dark">Chờ duyệt</span>
+                                        {% if exp.co_reason %}<small class="d-block text-muted">{{ exp.co_reason.name }}</small>{% endif %}
+                                    {% elif exp.co_status == 'approved' %}
+                                        <span class="badge bg-success">Đã duyệt</span>
+                                    {% elif exp.co_status == 'rejected' %}
+                                        <span class="badge bg-danger">Từ chối</span>
+                                    {% else %}
+                                        <span class="text-muted small">Chưa nộp</span>
+                                    {% endif %}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td><a href="/explanations/review/{{ exp.pk }}/" class="btn btn-sm btn-primary">Xem & Duyệt</a></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="8" class="text-center text-muted py-4">Không có giải trình nào chờ duyệt</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </form>
     </div>
 
     <!-- Tab đã xử lý -->
@@ -123,4 +145,17 @@
         </div>
     </div>
 </div>
+
+<script>
+function toggleAll() {
+    const cbs = document.querySelectorAll('.bulk-cb');
+    const anyUnchecked = [...cbs].some(cb => !cb.checked);
+    cbs.forEach(cb => cb.checked = anyUnchecked);
+}
+function confirmBulk(label) {
+    const count = document.querySelectorAll('.bulk-cb:checked').length;
+    if (!count) { alert('Chưa chọn giải trình nào.'); return false; }
+    return confirm(label.charAt(0).toUpperCase() + label.slice(1) + ' ' + count + ' giải trình đã chọn?');
+}
+</script>
 {% endblock %}

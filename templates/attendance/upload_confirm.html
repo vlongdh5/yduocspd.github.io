@@ -1,0 +1,38 @@
+{% extends "base/base.html" %}
+{% block title %}Xác nhận ghi đè dữ liệu{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-6">
+        <div class="card border-warning shadow-sm">
+            <div class="card-header bg-warning text-dark">
+                <strong><i class="bi bi-exclamation-triangle-fill"></i> Cảnh báo: Tháng {{ upload.month }} đã có dữ liệu</strong>
+            </div>
+            <div class="card-body">
+                <p>Nếu tiếp tục, toàn bộ dữ liệu cũ của tháng <strong>{{ upload.month }}</strong> sẽ bị xoá và thay thế bằng file vừa upload:</p>
+                <ul class="mb-3">
+                    <li><strong>{{ existing_records }}</strong> bản ghi chấm công sẽ bị xoá</li>
+                    <li><strong>{{ existing_explanations }}</strong> phiếu giải trình sẽ bị xoá{% if existing_explanations %} <span class="text-danger fw-bold">(bao gồm cả phiếu đã duyệt)</span>{% endif %}</li>
+                    {% if existing_calculations %}<li><strong>{{ existing_calculations }}</strong> kết quả tính công sẽ bị xoá (cần tính lại)</li>{% endif %}
+                </ul>
+                <p class="text-muted small">Hành động này không thể hoàn tác.</p>
+                <div class="d-flex gap-2">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="pending_upload_pk" value="{{ upload.pk }}">
+                        <button type="submit" name="confirm_overwrite" class="btn btn-danger">
+                            <i class="bi bi-trash3"></i> Xoá dữ liệu cũ và ghi đè
+                        </button>
+                    </form>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="pending_upload_pk" value="{{ upload.pk }}">
+                        <button type="submit" name="cancel_overwrite" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Huỷ
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -54,16 +54,58 @@ def my_attendance(request):
     })
 
 
+def _do_process(request, upload):
+    from .upload_processor import process_upload
+    from .parser import parse_attendance_excel, InvalidAttendanceFile
+    try:
+        rows = parse_attendance_excel(upload.file.path)
+        process_upload(upload, rows)
+        messages.success(
+            request,
+            f'Upload thành công: {upload.total_records} bản ghi, {upload.error_records} lỗi.'
+        )
+    except InvalidAttendanceFile as e:
+        upload.delete()
+        messages.error(request, str(e))
+        return False
+    except Exception as e:
+        upload.status = AttendanceUpload.Status.ERROR
+        upload.notes = str(e)
+        upload.save()
+        messages.error(request, f'Lỗi xử lý file: {e}')
+    return True
+
+
 @login_required
 def upload_attendance(request):
     if not request.user.is_hr:
         return redirect('attendance:my_attendance')
 
     from .forms import AttendanceUploadForm
-    from .upload_processor import process_upload
-    from .parser import parse_attendance_excel, InvalidAttendanceFile
+    from explanations.models import Explanation
 
     recent_uploads = AttendanceUpload.objects.order_by('-uploaded_at')[:10]
+
+    # Bước 2a: HR xác nhận ghi đè
+    if request.method == 'POST' and 'confirm_overwrite' in request.POST:
+        from reports.models import AttendanceCalculation
+        upload = get_object_or_404(AttendanceUpload, pk=request.POST.get('pending_upload_pk'))
+        month = upload.month
+        # Cascade: AttendanceUpload → AttendanceRecord → Explanation
+        AttendanceUpload.objects.filter(month=month).exclude(pk=upload.pk).delete()
+        # Không cascade: xóa tính công cũ của tháng này
+        AttendanceCalculation.objects.filter(month=month).delete()
+        ok = _do_process(request, upload)
+        if not ok:
+            return render(request, 'attendance/upload.html', {'form': AttendanceUploadForm(), 'recent_uploads': recent_uploads})
+        return redirect('attendance:upload_detail', pk=upload.pk)
+
+    # Bước 2b: HR huỷ
+    if request.method == 'POST' and 'cancel_overwrite' in request.POST:
+        upload = get_object_or_404(AttendanceUpload, pk=request.POST.get('pending_upload_pk'))
+        upload.delete()
+        messages.info(request, 'Đã huỷ upload.')
+        return redirect('attendance:upload')
 
     if request.method == 'POST':
         form = AttendanceUploadForm(request.POST, request.FILES)
@@ -71,22 +113,23 @@ def upload_attendance(request):
             upload = form.save(commit=False)
             upload.uploaded_by = request.user
             upload.save()
-            try:
-                rows = parse_attendance_excel(upload.file.path)
-                process_upload(upload, rows)
-                messages.success(
-                    request,
-                    f'Upload thành công: {upload.total_records} bản ghi, {upload.error_records} lỗi.'
-                )
-            except InvalidAttendanceFile as e:
-                upload.delete()
-                messages.error(request, str(e))
-                return render(request, 'attendance/upload.html', {'form': form, 'recent_uploads': recent_uploads})
-            except Exception as e:
-                upload.status = AttendanceUpload.Status.ERROR
-                upload.notes = str(e)
-                upload.save()
-                messages.error(request, f'Lỗi xử lý file: {e}')
+
+            existing = AttendanceUpload.objects.filter(month=upload.month).exclude(pk=upload.pk)
+            if existing.exists():
+                from reports.models import AttendanceCalculation
+                existing_records = AttendanceRecord.objects.filter(upload__in=existing).count()
+                existing_explanations = Explanation.objects.filter(record__upload__in=existing).count()
+                existing_calculations = AttendanceCalculation.objects.filter(month=upload.month).count()
+                return render(request, 'attendance/upload_confirm.html', {
+                    'upload': upload,
+                    'existing_records': existing_records,
+                    'existing_explanations': existing_explanations,
+                    'existing_calculations': existing_calculations,
+                })
+
+            ok = _do_process(request, upload)
+            if not ok:
+                return render(request, 'attendance/upload.html', {'form': AttendanceUploadForm(), 'recent_uploads': recent_uploads})
             return redirect('attendance:upload_detail', pk=upload.pk)
     else:
         form = AttendanceUploadForm()

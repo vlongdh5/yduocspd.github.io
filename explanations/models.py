@@ -112,9 +112,9 @@ class Explanation(models.Model):
             return self.Status.PENDING
         if all(s == self.Status.APPROVED for s in statuses):
             return self.Status.APPROVED
-        if any(s == self.Status.REJECTED for s in statuses):
-            return self.Status.REJECTED
-        return self.Status.PENDING
+        if any(s == self.Status.PENDING for s in statuses):
+            return self.Status.PENDING
+        return self.Status.REJECTED
 
     def __str__(self):
         return f'{self.employee.code} - {self.record.date} - {self.overall_status}'

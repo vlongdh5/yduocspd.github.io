@@ -213,6 +213,65 @@ def review_explanation(request, pk):
                 exp.save()
                 messages.success(request, f'Đã {"duyệt" if action == "approve" else "từ chối"} giải trình Check-out.')
 
+        # Nếu cả 2 phía đều đã xử lý xong → về danh sách, còn pending → ở lại
+        exp.refresh_from_db()
+        still_pending = (
+            (exp.has_ci_issue and exp.ci_status == Explanation.Status.PENDING) or
+            (exp.has_co_issue and exp.co_status == Explanation.Status.PENDING)
+        )
+        if still_pending:
+            return redirect('explanations:review', pk=exp.pk)
         return redirect('explanations:pending_approvals')
 
     return render(request, 'explanations/review.html', {'exp': exp, 'locked': locked})
+
+
+@login_required
+def bulk_review(request):
+    if not (request.user.is_tbp or request.user.is_hr):
+        return redirect('attendance:my_attendance')
+    if request.method != 'POST':
+        return redirect('explanations:pending_approvals')
+
+    action = request.POST.get('action')
+    if action not in ('approve', 'reject'):
+        return redirect('explanations:pending_approvals')
+
+    ids = request.POST.getlist('exp_ids')
+    if not ids:
+        messages.warning(request, 'Chưa chọn giải trình nào.')
+        return redirect('explanations:pending_approvals')
+
+    qs = Explanation.objects.filter(pk__in=ids)
+    # TBP chỉ được duyệt phòng ban mình quản lý
+    if request.user.is_tbp and not request.user.is_hr:
+        dept = request.user.managed_departments.first()
+        if dept:
+            qs = qs.filter(employee__department=dept)
+
+    now = timezone.now()
+    count = 0
+    status = Explanation.Status.APPROVED if action == 'approve' else Explanation.Status.REJECTED
+
+    for exp in qs.select_related('record'):
+        month = exp.record.upload.month if exp.record.upload_id else None
+        if month and _is_month_finalized(exp.employee, month):
+            continue
+        changed = False
+        if exp.has_ci_issue and exp.ci_status == Explanation.Status.PENDING:
+            exp.ci_status = status
+            exp.ci_reviewed_by = request.user
+            exp.ci_reviewed_at = now
+            changed = True
+        if exp.has_co_issue and exp.co_status == Explanation.Status.PENDING:
+            exp.co_status = status
+            exp.co_reviewed_by = request.user
+            exp.co_reviewed_at = now
+            changed = True
+        if changed:
+            exp.save()
+            count += 1
+
+    label = 'phê duyệt' if action == 'approve' else 'từ chối'
+    messages.success(request, f'Đã {label} {count} giải trình.')
+    return redirect('explanations:pending_approvals')

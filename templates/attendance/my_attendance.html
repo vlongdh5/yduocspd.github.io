@@ -49,9 +49,9 @@
                                 <span class="badge bg-success">Bình thường</span>
                             {% else %}
                                 {% if rec.explanation %}
-                                    {% if rec.explanation.status == 'pending' %}
+                                    {% if rec.explanation.overall_status == 'pending' %}
                                         <span class="badge bg-warning text-dark">Chờ duyệt</span>
-                                    {% elif rec.explanation.status == 'approved' %}
+                                    {% elif rec.explanation.overall_status == 'approved' %}
                                         <span class="badge bg-info">Đã duyệt</span>
                                     {% else %}
                                         <span class="badge bg-secondary">Từ chối</span>
@@ -65,9 +65,9 @@
                             {% if rec.status == 'error' %}
                                 {% if not rec.explanation %}
                                     <a href="/explanations/submit/{{ rec.pk }}/" class="btn btn-sm btn-outline-primary">Giải trình</a>
-                                {% elif rec.explanation.status == 'pending' %}
+                                {% elif rec.explanation.overall_status == 'pending' %}
                                     <a href="/explanations/submit/{{ rec.pk }}/" class="btn btn-sm btn-outline-secondary">Sửa</a>
-                                {% elif rec.explanation.status == 'rejected' %}
+                                {% elif rec.explanation.overall_status == 'rejected' %}
                                     <a href="/explanations/submit/{{ rec.pk }}/" class="btn btn-sm btn-outline-danger">Gửi lại</a>
                                 {% endif %}
                             {% endif %}
