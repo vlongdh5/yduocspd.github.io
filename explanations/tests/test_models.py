@@ -96,3 +96,17 @@ def test_is_fully_reviewed_pending_when_ci_pending(setup):
         ci_reason=s['reason'], ci_status=Explanation.Status.PENDING,
     )
     assert not exp.is_fully_reviewed
+
+
+@pytest.mark.django_db
+def test_explanation_reason_is_compensatory_default_false():
+    reason = ExplanationReason.objects.create(name='Test')
+    assert reason.is_compensatory is False
+
+
+@pytest.mark.django_db
+def test_compensatory_reasons_seeded():
+    from django.core.management import call_command
+    call_command('seed_explanation_reasons')
+    assert ExplanationReason.objects.filter(name='Nghỉ bù cả ngày', is_compensatory=True).exists()
+    assert ExplanationReason.objects.filter(name='Nghỉ bù nửa ngày', is_compensatory=True).exists()

@@ -12,6 +12,7 @@ class ExplanationReason(models.Model):
     order = models.IntegerField(default=0)
     # "Nghỉ phép nửa ngày" chỉ áp dụng khi ca làm việc cả ngày (workday_value=1)
     requires_full_day_shift = models.BooleanField(default=False)
+    is_compensatory = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
