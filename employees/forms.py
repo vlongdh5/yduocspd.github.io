@@ -79,11 +79,10 @@ class EmployeeForm(forms.ModelForm):
 class LeaveBalanceForm(forms.ModelForm):
     class Meta:
         model = LeaveBalance
-        fields = ['year', 'total_days', 'used_days']
+        fields = ['year', 'total_days']
         widgets = {
             'year': forms.NumberInput(attrs={'class': 'form-control'}),
             'total_days': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5'}),
-            'used_days': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5'}),
         }
 
 

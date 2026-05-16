@@ -60,7 +60,7 @@
                                   <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="ci_use_compensatory"
                                            value="1" id="ci_use_comp"
-                                           {% if exp and exp.ci_use_compensatory %}checked{% endif %}
+                                           {% if exp and exp.ci_use_compensatory or auto_ci_comp %}checked{% endif %}
                                            {% if not comp_balance or comp_balance.remaining_hours <= 0 %}disabled{% endif %}>
                                     <label class="form-check-label" for="ci_use_comp">
                                       Dùng giờ bù thay vì phép
@@ -117,7 +117,7 @@
                                   <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="co_use_compensatory"
                                            value="1" id="co_use_comp"
-                                           {% if exp and exp.co_use_compensatory %}checked{% endif %}
+                                           {% if exp and exp.co_use_compensatory or auto_co_comp %}checked{% endif %}
                                            {% if not comp_balance or comp_balance.remaining_hours <= 0 %}disabled{% endif %}>
                                     <label class="form-check-label" for="co_use_comp">
                                       Dùng giờ bù thay vì phép

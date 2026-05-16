@@ -1,7 +1,84 @@
+from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from .models import AttendanceRecord, AttendanceUpload
+
+
+def _rollback_leave_for_month(month):
+    """Roll back LeaveBalance.used_hours based on AttendanceCalculation.leave_hours
+    for the given month. Must be called BEFORE deleting AttendanceCalculation records."""
+    from reports.models import AttendanceCalculation
+    from employees.models import LeaveBalance
+
+    year = int(month[:4])
+    for calc in AttendanceCalculation.objects.filter(month=month).select_related('employee'):
+        if float(calc.leave_hours) <= 0:
+            continue
+        try:
+            lb = LeaveBalance.objects.get(employee=calc.employee, year=year)
+            lb.used_hours = max(Decimal('0'), lb.used_hours - calc.leave_hours)
+            lb.save()
+        except LeaveBalance.DoesNotExist:
+            pass
+
+
+def _rollback_compensatory_for_uploads(upload_ids):
+    """Before cascade-deleting uploads, roll back PROVISIONAL and DEBIT compensatory
+    transactions for affected employees within the month's date range.
+
+    PROVISIONAL: created when employee submits explanation with use_compensatory.
+    DEBIT: created by calculate_month; must also be rolled back so re-calculating
+    after a re-upload starts from a clean state.
+
+    Filters by employee+date range (not via explanation join) so orphaned transactions
+    — where explanation was already SET_NULL — are also caught.
+    """
+    if not upload_ids:
+        return
+    import calendar
+    from datetime import date as _date
+    from django.db.models import Q
+    from employees.models import CompensatoryBalance, CompensatoryTransaction
+
+    emp_ids = list(
+        AttendanceRecord.objects.filter(upload_id__in=upload_ids)
+        .values_list('employee_id', flat=True).distinct()
+    )
+    months = list(
+        AttendanceUpload.objects.filter(pk__in=upload_ids)
+        .values_list('month', flat=True).distinct()
+    )
+    if not emp_ids or not months:
+        return
+
+    date_q = Q()
+    for m in months:
+        y, mo = m.split('-')
+        first = _date(int(y), int(mo), 1)
+        last = _date(int(y), int(mo), calendar.monthrange(int(y), int(mo))[1])
+        date_q |= Q(date__range=(first, last))
+
+    tx_qs = CompensatoryTransaction.objects.filter(
+        transaction_type__in=[
+            CompensatoryTransaction.Type.PROVISIONAL,
+            CompensatoryTransaction.Type.DEBIT,
+        ],
+        employee_id__in=emp_ids,
+    ).filter(date_q)
+
+    by_employee = {}
+    for tx in tx_qs:
+        by_employee.setdefault(tx.employee_id, Decimal('0'))
+        by_employee[tx.employee_id] += tx.hours
+    for emp_id, total in by_employee.items():
+        try:
+            bal = CompensatoryBalance.objects.get(employee_id=emp_id)
+            bal.used_hours = max(Decimal('0'), bal.used_hours - total)
+            bal.save()
+        except CompensatoryBalance.DoesNotExist:
+            pass
+    tx_qs.delete()
 
 
 def _is_fully_submitted(record):
@@ -91,8 +168,15 @@ def upload_attendance(request):
         from reports.models import AttendanceCalculation
         upload = get_object_or_404(AttendanceUpload, pk=request.POST.get('pending_upload_pk'))
         month = upload.month
+        old_upload_ids = list(
+            AttendanceUpload.objects.filter(month=month).exclude(pk=upload.pk).values_list('pk', flat=True)
+        )
+        # Roll back leave balance from calculations before deleting them
+        _rollback_leave_for_month(month)
+        # Roll back provisional and debit compensatory transactions before cascade-delete
+        _rollback_compensatory_for_uploads(old_upload_ids)
         # Cascade: AttendanceUpload → AttendanceRecord → Explanation
-        AttendanceUpload.objects.filter(month=month).exclude(pk=upload.pk).delete()
+        AttendanceUpload.objects.filter(pk__in=old_upload_ids).delete()
         # Không cascade: xóa tính công cũ của tháng này
         AttendanceCalculation.objects.filter(month=month).delete()
         ok = _do_process(request, upload)

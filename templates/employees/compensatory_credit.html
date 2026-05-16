@@ -51,6 +51,8 @@
           <td>
             {% if t.transaction_type == 'credit' %}
             <span class="badge bg-success">Cấp</span>
+            {% elif t.transaction_type == 'provisional' %}
+            <span class="badge bg-light text-secondary border">Dự kiến</span>
             {% else %}
             <span class="badge bg-secondary">Dùng</span>
             {% endif %}

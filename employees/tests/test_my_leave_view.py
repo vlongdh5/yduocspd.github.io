@@ -22,11 +22,11 @@ def test_my_leave_requires_login(client):
 @pytest.mark.django_db
 def test_my_leave_shows_leave_balance(client, emp_user):
     client.force_login(emp_user['user'])
-    LeaveBalance.objects.create(employee=emp_user['emp'], year=2026, total_days=12, used_days=3)
+    LeaveBalance.objects.create(employee=emp_user['emp'], year=2026, total_days=12, used_hours=24)
     resp = client.get(reverse('employees:my_leave') + '?year=2026')
     assert resp.status_code == 200
     assert resp.context['leave_balance'].total_days == 12
-    assert resp.context['leave_balance'].remaining_days == 9
+    assert resp.context['leave_balance'].remaining_hours == 72  # 12*8 - 24
 
 
 @pytest.mark.django_db
@@ -41,7 +41,7 @@ def test_my_leave_shows_compensatory_balance(client, emp_user):
 @pytest.mark.django_db
 def test_my_leave_shows_leave_transactions(client, emp_user):
     client.force_login(emp_user['user'])
-    lb = LeaveBalance.objects.create(employee=emp_user['emp'], year=2026, total_days=12, used_days=1)
+    lb = LeaveBalance.objects.create(employee=emp_user['emp'], year=2026, total_days=12, used_hours=8)
     LeaveTransaction.objects.create(
         employee=emp_user['emp'], leave_balance=lb,
         date=date(2026, 5, 10), days=1, month='2026-05', note='Nghỉ phép'

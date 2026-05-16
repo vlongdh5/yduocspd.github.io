@@ -41,18 +41,22 @@ class LeaveBalance(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='leave_balances')
     year = models.IntegerField()
     total_days = models.DecimalField(max_digits=5, decimal_places=1, default=0)
-    used_days = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    used_hours = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+
+    @property
+    def remaining_hours(self):
+        return self.total_days * 8 - self.used_hours
 
     @property
     def remaining_days(self):
-        return self.total_days - self.used_days
+        return self.remaining_hours / 8
 
     class Meta:
         unique_together = [['employee', 'year']]
         verbose_name = 'Số ngày phép'
 
     def __str__(self):
-        return f'{self.employee.code} - {self.year}: {self.remaining_days} ngày còn lại'
+        return f'{self.employee.code} - {self.year}: {self.remaining_hours}h còn lại'
 
 
 class LeaveTransaction(models.Model):
@@ -92,6 +96,7 @@ class CompensatoryTransaction(models.Model):
     class Type(models.TextChoices):
         CREDIT = 'credit', 'Cấp bù'
         DEBIT = 'debit', 'Dùng bù'
+        PROVISIONAL = 'provisional', 'Dự kiến trừ bù'
 
     employee = models.ForeignKey(
         Employee, on_delete=models.CASCADE, related_name='compensatory_transactions'
@@ -99,7 +104,7 @@ class CompensatoryTransaction(models.Model):
     balance = models.ForeignKey(
         CompensatoryBalance, on_delete=models.CASCADE, related_name='transactions'
     )
-    transaction_type = models.CharField(max_length=10, choices=Type.choices)
+    transaction_type = models.CharField(max_length=15, choices=Type.choices)
     hours = models.DecimalField(max_digits=6, decimal_places=1)
     date = models.DateField()
     note = models.TextField(blank=True)

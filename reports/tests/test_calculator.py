@@ -418,6 +418,36 @@ def test_calculate_month_fallback_when_leave_balance_insufficient(base):
 
 
 @pytest.mark.django_db
+def test_calculate_month_updates_leave_balance_used_hours(base):
+    """calculate_month deve debitar leave_hours em lb.used_hours automaticamente"""
+    s = base
+    lb = LeaveBalance.objects.create(employee=s['emp'], year=2026, total_days=5)
+    record = _record(s['upload'], s['emp'], 1, ['ABSENT'])
+    reason = ExplanationReason.objects.create(name='Nghỉ phép cả ngày')
+    _explanation(record, s['emp'], ci_reason=reason, ci_status='approved',
+                 co_reason=reason, co_status='approved')
+    calculate_month(month='2026-05', calculated_by=s['hr'])
+    lb.refresh_from_db()
+    assert float(lb.used_hours) == 8.0  # 1 absent day = 8h deducted
+    assert float(lb.remaining_hours) == 32.0  # 5*8 - 8
+
+
+@pytest.mark.django_db
+def test_calculate_month_idempotent_leave_debit(base):
+    """Recalculating the same month must not double-debit leave balance"""
+    s = base
+    lb = LeaveBalance.objects.create(employee=s['emp'], year=2026, total_days=5)
+    record = _record(s['upload'], s['emp'], 1, ['ABSENT'])
+    reason = ExplanationReason.objects.create(name='Nghỉ phép cả ngày')
+    _explanation(record, s['emp'], ci_reason=reason, ci_status='approved',
+                 co_reason=reason, co_status='approved')
+    calculate_month(month='2026-05', calculated_by=s['hr'])
+    calculate_month(month='2026-05', calculated_by=s['hr'])
+    lb.refresh_from_db()
+    assert float(lb.used_hours) == 8.0  # must not double-count
+
+
+@pytest.mark.django_db
 def test_calculate_month_idempotent_compensatory_debit(base):
     """Recalculating the same month must not double-debit compensatory balance"""
     s = base

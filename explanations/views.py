@@ -1,10 +1,13 @@
+from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction as db_transaction
+from django.db.models import F
 from django.utils import timezone
 from .models import Explanation, ExplanationReason
 from attendance.models import AttendanceRecord, Shift
-from employees.models import CompensatoryBalance
+from employees.models import CompensatoryBalance, CompensatoryTransaction
 from reports.models import AttendanceCalculation
 
 
@@ -16,9 +19,9 @@ def _is_month_finalized(employee, month):
 
 def _dept_filter(qs, user):
     if user.is_tbp and not user.is_hr:
-        dept = user.managed_departments.first()
-        if dept:
-            return qs.filter(employee__department=dept)
+        depts = user.managed_departments.all()
+        if depts.exists():
+            return qs.filter(employee__department__in=depts)
         return qs.none()
     return qs
 
@@ -34,6 +37,115 @@ def _reasons_for_shift(shift):
     if shift is None or float(shift.workday_value) != 1:
         qs = qs.filter(requires_full_day_shift=False)
     return qs
+
+
+def _compute_auto_comp(record, shift, exp, comp_balance):
+    """Return (auto_ci_comp, auto_co_comp): True when the checkbox should be pre-checked.
+
+    Pre-check a side if:
+    - the employee has no explicit preference yet for that side, AND
+    - remaining compensatory hours exceed the estimated deduction for that side.
+    """
+    from reports.calculator import _morning_block_hours, _afternoon_block_hours
+
+    if not comp_balance or float(comp_balance.remaining_hours) <= 0:
+        return False, False
+
+    remaining = float(comp_balance.remaining_hours)
+    error_set = set(record.error_types)
+    shift_hours = float(shift.work_hours) if shift else 8.0
+
+    if 'ABSENT' in error_set:
+        ci_est = shift_hours
+        co_est = 0.0
+    else:
+        if 'LATE' in error_set and record.minutes_late:
+            ci_est = record.minutes_late / 60
+        elif 'MISSING_IN' in error_set:
+            ci_est = _morning_block_hours(shift) if shift else 4.0
+        else:
+            ci_est = 0.0
+
+        if 'EARLY_LEAVE' in error_set and record.minutes_early:
+            co_est = record.minutes_early / 60
+        elif 'MISSING_OUT' in error_set:
+            co_est = _afternoon_block_hours(shift) if shift else 4.0
+        else:
+            co_est = 0.0
+
+    ci_no_pref = (exp is None or exp.ci_reason_id is None)
+    co_no_pref = (exp is None or exp.co_reason_id is None)
+
+    auto_ci = ci_no_pref and ci_est > 0 and remaining > ci_est
+    remaining_after_ci = remaining - (ci_est if auto_ci else 0)
+    auto_co = co_no_pref and co_est > 0 and remaining_after_ci > co_est
+
+    return auto_ci, auto_co
+
+
+def _sync_provisional_compensatory(employee, exp, record):
+    """After saving an explanation, create/update the provisional compensatory deduction.
+
+    The provisional transaction immediately reduces `used_hours` so subsequent
+    explanation submissions see the updated estimated remaining hours.
+    `calculate_month` will delete all provisionals for the month and replace them
+    with a single authoritative DEBIT transaction.
+    """
+    from reports.calculator import compute_record_hours
+
+    has_comp = bool(exp.ci_use_compensatory or exp.co_use_compensatory)
+    comp_balance, _ = CompensatoryBalance.objects.get_or_create(employee=employee)
+
+    with db_transaction.atomic():
+        # Roll back any existing provisional for this explanation
+        try:
+            old_prov = exp.compensatory_transaction
+            if old_prov.transaction_type == CompensatoryTransaction.Type.PROVISIONAL:
+                CompensatoryBalance.objects.filter(pk=comp_balance.pk).update(
+                    used_hours=F('used_hours') - old_prov.hours
+                )
+                old_prov.delete()
+        except CompensatoryTransaction.DoesNotExist:
+            pass
+
+        if not has_comp:
+            return
+
+        # Estimate hours by treating use_compensatory sides as approved
+        mock = Explanation(
+            record=exp.record,
+            employee=exp.employee,
+            ci_reason=exp.ci_reason,
+            co_reason=exp.co_reason,
+            ci_status=(Explanation.Status.APPROVED
+                       if (exp.ci_use_compensatory and exp.ci_reason) else exp.ci_status),
+            co_status=(Explanation.Status.APPROVED
+                       if (exp.co_use_compensatory and exp.co_reason) else exp.co_status),
+            ci_use_compensatory=exp.ci_use_compensatory,
+            co_use_compensatory=exp.co_use_compensatory,
+        )
+        shift = _get_shift(record)
+        _, _, c = compute_record_hours(record, mock, shift, 0)
+        if c <= 0:
+            return
+
+        comp_balance.refresh_from_db()
+        if float(comp_balance.remaining_hours) < c:
+            return
+
+        prov_hours = Decimal(str(round(c, 2)))
+        CompensatoryTransaction.objects.create(
+            employee=employee,
+            balance=comp_balance,
+            transaction_type=CompensatoryTransaction.Type.PROVISIONAL,
+            hours=prov_hours,
+            date=record.date,
+            note=f'Dự kiến — giải trình ngày {record.date}',
+            explanation=exp,
+        )
+        CompensatoryBalance.objects.filter(pk=comp_balance.pk).update(
+            used_hours=F('used_hours') + prov_hours
+        )
 
 
 @login_required
@@ -91,6 +203,7 @@ def submit_explanation(request, record_id):
             exp.co_reviewer_note = ''
 
         exp.save()
+        _sync_provisional_compensatory(request.user.employee_profile, exp, record)
         messages.success(request, 'Giải trình đã được nộp.')
         return redirect('attendance:my_attendance')
 
@@ -106,6 +219,10 @@ def submit_explanation(request, record_id):
         ]
     ).values_list('id', flat=True))
 
+    auto_ci_comp, auto_co_comp = _compute_auto_comp(
+        record, shift, exp, comp_balance
+    )
+
     return render(request, 'explanations/submit.html', {
         'record': record,
         'exp': exp,
@@ -116,6 +233,8 @@ def submit_explanation(request, record_id):
         'co_locked': co_locked,
         'comp_balance': comp_balance,
         'leave_reason_ids': leave_reason_ids,
+        'auto_ci_comp': auto_ci_comp,
+        'auto_co_comp': auto_co_comp,
     })
 
 
@@ -280,9 +399,9 @@ def bulk_review(request):
     qs = Explanation.objects.filter(pk__in=ids)
     # TBP chỉ được duyệt phòng ban mình quản lý
     if request.user.is_tbp and not request.user.is_hr:
-        dept = request.user.managed_departments.first()
-        if dept:
-            qs = qs.filter(employee__department=dept)
+        depts = request.user.managed_departments.all()
+        if depts.exists():
+            qs = qs.filter(employee__department__in=depts)
 
     now = timezone.now()
     count = 0

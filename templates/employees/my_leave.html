@@ -1,4 +1,5 @@
 {% extends "base/base.html" %}
+{% load leave_tags %}
 {% block title %}Số dư nghỉ phép & nghỉ bù{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -25,11 +26,11 @@
                         <div class="small text-muted">Tổng phép</div>
                     </div>
                     <div class="col-4">
-                        <div class="fs-3 fw-bold text-warning">{{ leave_balance.used_days }}</div>
+                        <div class="fs-3 fw-bold text-warning">{{ leave_balance.used_hours|hours_to_dh }}</div>
                         <div class="small text-muted">Đã dùng</div>
                     </div>
                     <div class="col-4">
-                        <div class="fs-3 fw-bold text-success">{{ leave_balance.remaining_days }}</div>
+                        <div class="fs-3 fw-bold text-success">{{ leave_balance.remaining_hours|hours_to_dh }}</div>
                         <div class="small text-muted">Còn lại</div>
                     </div>
                 </div>
@@ -178,6 +179,8 @@
                         <td>
                             {% if tx.transaction_type == 'credit' %}
                             <span class="badge bg-success">Cấp bù</span>
+                            {% elif tx.transaction_type == 'provisional' %}
+                            <span class="badge bg-secondary">Dự kiến trừ</span>
                             {% else %}
                             <span class="badge bg-warning text-dark">Dùng bù</span>
                             {% endif %}

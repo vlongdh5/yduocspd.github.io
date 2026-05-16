@@ -326,9 +326,30 @@ def calculate_month(month: str, calculated_by: User) -> dict:
         lb = LeaveBalance.objects.filter(
             employee=emp, year=int(month[:4])
         ).first()
+        # Roll back previous month's leave deduction so recalculation is idempotent
+        old_calc = AttendanceCalculation.objects.filter(employee=emp, month=month).first()
+        if lb is not None and old_calc is not None:
+            rollback = float(old_calc.leave_hours)
+            if rollback > 0:
+                lb.used_hours = Decimal(str(max(0.0, float(lb.used_hours) - rollback)))
+                lb.save()
         # None means no balance record → no constraint; non-None means apply running constraint
-        running_leave_remaining = float(lb.remaining_days * 8) if lb is not None else None
+        running_leave_remaining = float(lb.remaining_hours) if lb is not None else None
         comp_balance, _ = CompensatoryBalance.objects.get_or_create(employee=emp)
+        # Roll back provisional transactions for this month's records
+        prov_qs = CompensatoryTransaction.objects.filter(
+            employee=emp,
+            transaction_type=CompensatoryTransaction.Type.PROVISIONAL,
+            explanation__record__upload__month=month,
+        )
+        prov_total = float(sum(t.hours for t in prov_qs))
+        if prov_total > 0:
+            comp_balance.used_hours = Decimal(str(
+                max(0.0, float(comp_balance.used_hours) - prov_total)
+            ))
+            comp_balance.save()
+        prov_qs.delete()
+
         # Undo previous debit for this month so recalculation is idempotent
         existing_debit = CompensatoryTransaction.objects.filter(
             employee=emp,
@@ -385,6 +406,10 @@ def calculate_month(month: str, calculated_by: User) -> dict:
                 'status': AttendanceCalculation.Status.DRAFT,
             }
         )
+
+        if lb is not None and total_leave > 0:
+            lb.used_hours = Decimal(str(float(lb.used_hours) + total_leave))
+            lb.save()
 
         if total_compensatory > 0:
             comp_balance.used_hours = Decimal(str(

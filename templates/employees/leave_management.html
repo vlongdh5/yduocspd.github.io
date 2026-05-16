@@ -1,21 +1,24 @@
 {% extends "base/base.html" %}
+{% load leave_tags %}
 {% block title %}Quản lý phép & nghỉ bù{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0"><i class="bi bi-calendar2-week"></i> Quản lý phép & nghỉ bù {{ current_year }}</h4>
-  <a href="?{% if dept_id %}dept={{ dept_id }}&{% endif %}export=1" class="btn btn-success btn-sm">
+  <a href="?{% if dept_id %}dept={{ dept_id }}&{% endif %}{% if q %}q={{ q|urlencode }}&{% endif %}export=1" class="btn btn-success btn-sm">
     <i class="bi bi-download"></i> Export Excel
   </a>
 </div>
 
-<form method="get" class="d-flex gap-2 mb-3">
-  <select name="dept" class="form-select form-select-sm" style="width:200px">
+<form method="get" class="d-flex gap-2 mb-3 flex-wrap">
+  <select name="dept" class="form-select form-select-sm w-auto">
     <option value="">Tất cả phòng ban</option>
     {% for d in departments %}
     <option value="{{ d.pk }}" {% if dept_id == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>
     {% endfor %}
   </select>
+  <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm w-auto" placeholder="Tìm tên / mã nhân viên...">
   <button class="btn btn-sm btn-outline-secondary">Lọc</button>
+  {% if q or dept_id %}<a href="?" class="btn btn-sm btn-outline-danger">Xóa lọc</a>{% endif %}
 </form>
 
 <div class="table-responsive">
@@ -34,10 +37,10 @@
       <td>{{ item.emp.department.name }}</td>
       <td>
         {% if item.lb %}
-          <span class="{% if item.lb.remaining_days <= 0 %}text-danger{% endif %}">
-            {{ item.lb.remaining_days }}d
+          <span class="{% if item.lb.remaining_hours <= 0 %}text-danger{% endif %}">
+            {{ item.lb.remaining_hours|hours_to_dh }}
           </span>
-          <small class="text-muted">({{ item.lb.used_days }}/{{ item.lb.total_days }})</small>
+          <small class="text-muted">({{ item.lb.used_hours|hours_to_dh }}/{{ item.lb.total_days }}d)</small>
         {% else %}—{% endif %}
       </td>
       <td>

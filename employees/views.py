@@ -1,3 +1,4 @@
+import unicodedata
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -10,6 +11,11 @@ from django.http import HttpResponse
 from django.utils import timezone
 from decimal import Decimal
 import openpyxl
+
+
+def _normalize(text):
+    """Bỏ dấu tiếng Việt, lowercase — dùng để so sánh fuzzy."""
+    return unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode().lower()
 from .models import Employee, Department, LeaveBalance, LeaveTransaction, CompensatoryBalance, CompensatoryTransaction
 from .forms import EmployeeForm, LeaveBalanceForm, CompensatoryCreditForm
 
@@ -168,6 +174,14 @@ def leave_management(request):
         employees_qs = employees_qs.filter(department_id=dept_id)
     employees_list = list(employees_qs.order_by('code'))
 
+    q = request.GET.get('q', '').strip()
+    if q:
+        q_norm = _normalize(q)
+        employees_list = [
+            emp for emp in employees_list
+            if q_norm in _normalize(emp.full_name) or q.lower() in emp.code.lower()
+        ]
+
     leave_by_emp = {
         lb.employee_id: lb
         for lb in LeaveBalance.objects.filter(employee__in=employees_list, year=current_year)
@@ -191,6 +205,7 @@ def leave_management(request):
         'departments': departments,
         'dept_id': dept_id,
         'current_year': current_year,
+        'q': q,
     })
 
 

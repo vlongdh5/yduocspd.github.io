@@ -12,7 +12,7 @@ def setup(db):
     dept = Department.objects.create(name='KD')
     emp = Employee.objects.create(user=user, code='NV001', full_name='Nguyen Van A', department=dept)
     hr = User.objects.create_user(email='hr@example.com', password='pass', role=User.Role.HR)
-    LeaveBalance.objects.create(employee=emp, year=2026, total_days=12, used_days=2)
+    LeaveBalance.objects.create(employee=emp, year=2026, total_days=12, used_hours=16)
     AttendanceCalculation.objects.create(
         employee=emp, month='2026-05', actual_workdays=20, leave_days_used=2, calculated_by=hr
     )

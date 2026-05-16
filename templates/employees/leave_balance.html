@@ -1,4 +1,5 @@
 {% extends "base/base.html" %}
+{% load leave_tags %}
 {% block title %}Ngày phép — {{ emp.full_name }}{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -16,9 +17,9 @@
                 {% for lb in balances %}
                 <tr>
                     <td>{{ lb.year }}</td>
-                    <td>{{ lb.total_days }}</td>
-                    <td>{{ lb.used_days }}</td>
-                    <td><strong>{{ lb.remaining_days }}</strong></td>
+                    <td>{{ lb.total_days }}d</td>
+                    <td>{{ lb.used_hours|hours_to_dh }}</td>
+                    <td><strong>{{ lb.remaining_hours|hours_to_dh }}</strong></td>
                 </tr>
                 {% empty %}
                 <tr><td colspan="4" class="text-center text-muted">Chưa có dữ liệu phép</td></tr>
@@ -39,10 +40,6 @@
                     <div class="mb-2">
                         <label class="form-label">Tổng số ngày phép</label>
                         {{ form.total_days }}
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Đã sử dụng</label>
-                        {{ form.used_days }}
                     </div>
                     <button type="submit" class="btn btn-primary w-100">Lưu</button>
                 </form>

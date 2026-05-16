@@ -13,13 +13,15 @@ def employee(db):
 @pytest.mark.django_db
 def test_create_leave_balance(employee):
     lb = LeaveBalance.objects.create(employee=employee, year=2026, total_days=12)
-    assert lb.used_days == 0
+    assert lb.used_hours == 0
+    assert lb.remaining_hours == 96  # 12 * 8
     assert lb.remaining_days == 12
 
 
 @pytest.mark.django_db
 def test_leave_balance_remaining_computed(employee):
-    lb = LeaveBalance.objects.create(employee=employee, year=2026, total_days=12, used_days=3)
+    lb = LeaveBalance.objects.create(employee=employee, year=2026, total_days=12, used_hours=24)
+    assert lb.remaining_hours == 72  # 96 - 24
     assert lb.remaining_days == 9
 
 

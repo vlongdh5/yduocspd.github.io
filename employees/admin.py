@@ -16,7 +16,7 @@ class EmployeeAdmin(admin.ModelAdmin):
 
 @admin.register(LeaveBalance)
 class LeaveBalanceAdmin(admin.ModelAdmin):
-    list_display = ['employee', 'year', 'total_days', 'used_days', 'remaining_days']
+    list_display = ['employee', 'year', 'total_days', 'used_hours', 'remaining_days']
     list_filter = ['year']
 
 
