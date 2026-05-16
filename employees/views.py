@@ -81,6 +81,7 @@ class MyLeaveView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         current_year = timezone.now().year
+        year_range = range(current_year - 4, current_year + 2)
 
         # Year filter (for leave-transaction tab)
         try:
@@ -100,7 +101,7 @@ class MyLeaveView(LoginRequiredMixin, TemplateView):
                 'comp_page': None,
                 'year': year,
                 'current_year': current_year,
-                'year_range': range(current_year - 4, current_year + 2),
+                'year_range': year_range,
                 'active_tab': self.request.GET.get('tab', 'leave'),
             })
             return context
@@ -121,7 +122,7 @@ class MyLeaveView(LoginRequiredMixin, TemplateView):
         leave_qs = LeaveTransaction.objects.filter(
             employee=employee,
             leave_balance__year=year,
-        ).order_by('-date')
+        ).select_related('leave_balance').order_by('-date')
         leave_paginator = Paginator(leave_qs, self.PAGE_SIZE)
         leave_page_num = self.request.GET.get('lpage', 1)
         leave_page = leave_paginator.get_page(leave_page_num)
@@ -129,7 +130,7 @@ class MyLeaveView(LoginRequiredMixin, TemplateView):
         # Paginated compensatory transactions (all time)
         comp_qs = CompensatoryTransaction.objects.filter(
             employee=employee,
-        ).order_by('-date', '-created_at')
+        ).select_related('balance').order_by('-date', '-created_at')
         comp_paginator = Paginator(comp_qs, self.PAGE_SIZE)
         comp_page_num = self.request.GET.get('cpage', 1)
         comp_page = comp_paginator.get_page(comp_page_num)
@@ -139,10 +140,12 @@ class MyLeaveView(LoginRequiredMixin, TemplateView):
             'leave_balance': leave_balance,
             'comp_balance': comp_balance,
             'leave_page': leave_page,
+            'leave_elided_range': leave_paginator.get_elided_page_range(leave_page.number),
             'comp_page': comp_page,
+            'comp_elided_range': comp_paginator.get_elided_page_range(comp_page.number),
             'year': year,
             'current_year': current_year,
-            'year_range': range(current_year - 4, current_year + 2),
+            'year_range': year_range,
             'active_tab': self.request.GET.get('tab', 'leave'),
         })
         return context

@@ -23,10 +23,10 @@ def test_my_leave_requires_login(client):
 def test_my_leave_shows_leave_balance(client, emp_user):
     client.force_login(emp_user['user'])
     LeaveBalance.objects.create(employee=emp_user['emp'], year=2026, total_days=12, used_days=3)
-    resp = client.get(reverse('employees:my_leave'))
+    resp = client.get(reverse('employees:my_leave') + '?year=2026')
     assert resp.status_code == 200
-    assert '12' in resp.content.decode()
-    assert '9' in resp.content.decode()  # remaining
+    assert resp.context['leave_balance'].total_days == 12
+    assert resp.context['leave_balance'].remaining_days == 9
 
 
 @pytest.mark.django_db
@@ -35,7 +35,7 @@ def test_my_leave_shows_compensatory_balance(client, emp_user):
     CompensatoryBalance.objects.create(employee=emp_user['emp'], total_hours=16, used_hours=4)
     resp = client.get(reverse('employees:my_leave'))
     assert resp.status_code == 200
-    assert '12' in resp.content.decode()  # remaining hours
+    assert resp.context['comp_balance'].remaining_hours == 12
 
 
 @pytest.mark.django_db
@@ -46,7 +46,7 @@ def test_my_leave_shows_leave_transactions(client, emp_user):
         employee=emp_user['emp'], leave_balance=lb,
         date=date(2026, 5, 10), days=1, month='2026-05', note='Nghỉ phép'
     )
-    resp = client.get(reverse('employees:my_leave'))
+    resp = client.get(reverse('employees:my_leave') + '?year=2026')
     assert resp.status_code == 200
     assert 'Nghỉ phép' in resp.content.decode()
 
@@ -70,3 +70,13 @@ def test_my_leave_no_data_shows_placeholder(client, emp_user):
     resp = client.get(reverse('employees:my_leave'))
     assert resp.status_code == 200
     assert 'Chưa có dữ liệu' in resp.content.decode()
+
+
+@pytest.mark.django_db
+def test_my_leave_no_employee_profile(client, db):
+    user = User.objects.create_user(email='nomap@example.com', password='pass')
+    client.force_login(user)
+    resp = client.get(reverse('employees:my_leave'))
+    assert resp.status_code == 200
+    assert resp.context['employee'] is None
+    assert 'chưa được liên kết' in resp.content.decode()

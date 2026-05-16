@@ -135,10 +135,14 @@
                     <a class="page-link" href="?tab=leave&year={{ year }}&lpage={{ leave_page.previous_page_number }}">«</a>
                 </li>
                 {% endif %}
-                {% for num in leave_page.paginator.page_range %}
+                {% for num in leave_elided_range %}
+                {% if num == '…' %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% else %}
                 <li class="page-item {% if num == leave_page.number %}active{% endif %}">
                     <a class="page-link" href="?tab=leave&year={{ year }}&lpage={{ num }}">{{ num }}</a>
                 </li>
+                {% endif %}
                 {% endfor %}
                 {% if leave_page.has_next %}
                 <li class="page-item">
@@ -194,10 +198,14 @@
                     <a class="page-link" href="?tab=comp&year={{ year }}&cpage={{ comp_page.previous_page_number }}">«</a>
                 </li>
                 {% endif %}
-                {% for num in comp_page.paginator.page_range %}
+                {% for num in comp_elided_range %}
+                {% if num == '…' %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% else %}
                 <li class="page-item {% if num == comp_page.number %}active{% endif %}">
                     <a class="page-link" href="?tab=comp&year={{ year }}&cpage={{ num }}">{{ num }}</a>
                 </li>
+                {% endif %}
                 {% endfor %}
                 {% if comp_page.has_next %}
                 <li class="page-item">
@@ -222,6 +230,11 @@ function applyYearFilter(year) {
     const url = new URL(window.location.href);
     url.searchParams.set('year', year);
     url.searchParams.delete('lpage');
+    const activeBtn = document.querySelector('#leaveTabs .nav-link.active');
+    if (activeBtn) {
+        const pane = activeBtn.getAttribute('data-bs-target');
+        url.searchParams.set('tab', pane === '#pane-comp' ? 'comp' : 'leave');
+    }
     window.location.href = url.toString();
 }
 </script>
