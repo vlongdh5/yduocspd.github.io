@@ -413,4 +413,23 @@ def test_calculate_month_fallback_when_leave_balance_insufficient(base):
                  co_reason=reason, co_status='approved')
     result = calculate_month(month='2026-05', calculated_by=s['hr'])
     calc = result[s['emp'].code]
+    assert float(calc.work_hours) == 8.0  # absent but fallback → treated as excused
     assert float(calc.leave_hours) == 0.0
+
+
+@pytest.mark.django_db
+def test_calculate_month_idempotent_compensatory_debit(base):
+    """Recalculating the same month must not double-debit compensatory balance"""
+    s = base
+    bal = CompensatoryBalance.objects.create(employee=s['emp'], total_hours=8, used_hours=0)
+    record = _record(s['upload'], s['emp'], 1, ['ABSENT'])
+    reason = ExplanationReason.objects.create(name='Nghỉ bù cả ngày', is_compensatory=True)
+    _explanation(record, s['emp'], ci_reason=reason, ci_status='approved',
+                 co_reason=reason, co_status='approved')
+    calculate_month(month='2026-05', calculated_by=s['hr'])
+    calculate_month(month='2026-05', calculated_by=s['hr'])
+    bal.refresh_from_db()
+    assert float(bal.used_hours) == 8.0
+    assert CompensatoryTransaction.objects.filter(
+        employee=s['emp'], transaction_type='debit'
+    ).count() == 1

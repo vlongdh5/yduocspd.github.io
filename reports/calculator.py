@@ -1,5 +1,6 @@
+import calendar
 from decimal import Decimal
-from datetime import time
+from datetime import date as _date, time
 from attendance.models import AttendanceRecord, Shift
 from explanations.models import Explanation
 from employees.models import Employee, LeaveBalance, CompensatoryBalance, CompensatoryTransaction
@@ -328,6 +329,16 @@ def calculate_month(month: str, calculated_by: User) -> dict:
         # None means no balance record → no constraint; non-None means apply running constraint
         running_leave_remaining = float(lb.remaining_days * 8) if lb is not None else None
         comp_balance, _ = CompensatoryBalance.objects.get_or_create(employee=emp)
+        # Undo previous debit for this month so recalculation is idempotent
+        existing_debit = CompensatoryTransaction.objects.filter(
+            employee=emp,
+            transaction_type=CompensatoryTransaction.Type.DEBIT,
+            note=f'Tính công tháng {month}',
+        ).first()
+        if existing_debit:
+            comp_balance.used_hours -= existing_debit.hours
+            comp_balance.save()
+            existing_debit.delete()
         running_comp_remaining = float(comp_balance.remaining_hours)
 
         for record in emp_records:
@@ -346,6 +357,9 @@ def calculate_month(month: str, calculated_by: User) -> dict:
                 c = 0.0
 
             if l > 0 and running_leave_remaining is not None and running_leave_remaining - l < 0:
+                if w == 0.0:
+                    # ABSENT record: restore work hours so employee isn't penalized as unpaid
+                    w = float(shift.work_hours) if shift else 8.0
                 l = 0.0
 
             running_comp_remaining -= c
@@ -373,8 +387,6 @@ def calculate_month(month: str, calculated_by: User) -> dict:
         )
 
         if total_compensatory > 0:
-            import calendar
-            from datetime import date as _date
             comp_balance.used_hours = Decimal(str(
                 float(comp_balance.used_hours) + total_compensatory
             ))
