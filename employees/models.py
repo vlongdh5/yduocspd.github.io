@@ -82,6 +82,7 @@ class CompensatoryBalance(models.Model):
 
     class Meta:
         verbose_name = 'Số giờ nghỉ bù'
+        verbose_name_plural = 'Số giờ nghỉ bù'
 
     def __str__(self):
         return f'{self.employee.code} - bù còn {self.remaining_hours}h'
@@ -99,7 +100,7 @@ class CompensatoryTransaction(models.Model):
         CompensatoryBalance, on_delete=models.CASCADE, related_name='transactions'
     )
     transaction_type = models.CharField(max_length=10, choices=Type.choices)
-    hours = models.DecimalField(max_digits=4, decimal_places=1)
+    hours = models.DecimalField(max_digits=6, decimal_places=1)
     date = models.DateField()
     note = models.TextField(blank=True)
     created_by = models.ForeignKey(
@@ -113,6 +114,7 @@ class CompensatoryTransaction(models.Model):
 
     class Meta:
         verbose_name = 'Giao dịch nghỉ bù'
+        verbose_name_plural = 'Giao dịch nghỉ bù'
         ordering = ['-date', '-created_at']
 
     def __str__(self):
