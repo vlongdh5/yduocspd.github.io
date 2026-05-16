@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.utils import timezone
 from .models import Explanation, ExplanationReason
 from attendance.models import AttendanceRecord, Shift
+from employees.models import CompensatoryBalance
 from reports.models import AttendanceCalculation
 
 
@@ -93,10 +94,9 @@ def submit_explanation(request, record_id):
         messages.success(request, 'Giải trình đã được nộp.')
         return redirect('attendance:my_attendance')
 
-    from employees.models import CompensatoryBalance
     try:
         comp_balance = request.user.employee_profile.compensatory_balance
-    except Exception:
+    except CompensatoryBalance.DoesNotExist:
         comp_balance = None
 
     leave_reason_ids = list(ExplanationReason.objects.filter(
@@ -176,7 +176,7 @@ def review_explanation(request, pk):
         return redirect('attendance:my_attendance')
 
     qs = Explanation.objects.select_related(
-        'record__upload', 'employee', 'ci_reason', 'co_reason',
+        'record__upload', 'employee__compensatory_balance', 'ci_reason', 'co_reason',
         'ci_reviewed_by', 'co_reviewed_by'
     )
     exp = get_object_or_404(_dept_filter(qs, request.user), pk=pk)
@@ -244,7 +244,6 @@ def review_explanation(request, pk):
             return redirect('explanations:review', pk=exp.pk)
         return redirect('explanations:pending_approvals')
 
-    from employees.models import CompensatoryBalance
     try:
         comp_balance = exp.employee.compensatory_balance
     except CompensatoryBalance.DoesNotExist:
