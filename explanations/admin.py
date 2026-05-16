@@ -4,8 +4,8 @@ from .models import ExplanationReason, Explanation
 
 @admin.register(ExplanationReason)
 class ExplanationReasonAdmin(admin.ModelAdmin):
-    list_display = ['name', 'order', 'is_active']
-    list_editable = ['order', 'is_active']
+    list_display = ['name', 'order', 'is_active', 'is_compensatory']
+    list_editable = ['order', 'is_active', 'is_compensatory']
 
 
 @admin.register(Explanation)
