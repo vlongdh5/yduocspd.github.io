@@ -4,9 +4,12 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.views.generic import TemplateView
 from django.core.paginator import Paginator
+from django.http import HttpResponse
 from django.utils import timezone
+from decimal import Decimal
+import openpyxl
 from .models import Employee, Department, LeaveBalance, LeaveTransaction, CompensatoryBalance, CompensatoryTransaction
-from .forms import EmployeeForm, LeaveBalanceForm
+from .forms import EmployeeForm, LeaveBalanceForm, CompensatoryCreditForm
 
 
 def _hr_only(request):
@@ -149,3 +152,100 @@ class MyLeaveView(LoginRequiredMixin, TemplateView):
             'active_tab': self.request.GET.get('tab', 'leave'),
         })
         return context
+
+
+@login_required
+def leave_management(request):
+    if not _hr_only(request):
+        return redirect('attendance:my_attendance')
+    from django.utils import timezone as tz
+    current_year = tz.now().year
+    dept_id = request.GET.get('dept')
+    employees_qs = Employee.objects.select_related(
+        'department', 'compensatory_balance'
+    ).prefetch_related('leave_balances').filter(is_active=True)
+    if dept_id:
+        employees_qs = employees_qs.filter(department_id=dept_id)
+    employees_qs = employees_qs.order_by('code')
+
+    emp_data = []
+    for emp in employees_qs:
+        lb = emp.leave_balances.filter(year=current_year).first()
+        cb = getattr(emp, 'compensatory_balance', None)
+        emp_data.append({'emp': emp, 'lb': lb, 'cb': cb})
+
+    departments = Department.objects.all()
+
+    if 'export' in request.GET:
+        return _export_leave_management(emp_data, current_year)
+
+    return render(request, 'employees/leave_management.html', {
+        'emp_data': emp_data,
+        'departments': departments,
+        'dept_id': dept_id,
+        'current_year': current_year,
+    })
+
+
+def _export_leave_management(emp_data, year):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f'Phep_Bu_{year}'
+    ws.append(['Mã NV', 'Họ tên', 'Phòng ban',
+               f'Phép tổng {year}', 'Phép đã dùng', 'Phép còn lại',
+               'Bù tổng (h)', 'Bù đã dùng (h)', 'Bù còn lại (h)'])
+    for item in emp_data:
+        emp, lb, cb = item['emp'], item['lb'], item['cb']
+        ws.append([
+            emp.code, emp.full_name, emp.department.name,
+            float(lb.total_days) if lb else 0,
+            float(lb.used_days) if lb else 0,
+            float(lb.remaining_days) if lb else 0,
+            float(cb.total_hours) if cb else 0,
+            float(cb.used_hours) if cb else 0,
+            float(cb.remaining_hours) if cb else 0,
+        ])
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="phep_bu_{year}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def compensatory_credit(request, emp_pk):
+    if not _hr_only(request):
+        return redirect('attendance:my_attendance')
+    emp = get_object_or_404(Employee, pk=emp_pk)
+    comp_balance, _ = CompensatoryBalance.objects.get_or_create(employee=emp)
+    transactions = CompensatoryTransaction.objects.filter(
+        employee=emp
+    ).select_related('created_by').order_by('-date', '-created_at')[:30]
+
+    if request.method == 'POST':
+        form = CompensatoryCreditForm(request.POST)
+        if form.is_valid():
+            hours = form.cleaned_data['hours']
+            comp_balance.total_hours += hours
+            comp_balance.save()
+            CompensatoryTransaction.objects.create(
+                employee=emp,
+                balance=comp_balance,
+                transaction_type=CompensatoryTransaction.Type.CREDIT,
+                hours=hours,
+                date=form.cleaned_data['date'],
+                note=form.cleaned_data.get('note', ''),
+                created_by=request.user,
+            )
+            messages.success(request, f'Đã cấp {hours}h nghỉ bù cho {emp.full_name}.')
+            return redirect('employees:compensatory_credit', emp_pk=emp_pk)
+    else:
+        form = CompensatoryCreditForm()
+
+    return render(request, 'employees/compensatory_credit.html', {
+        'emp': emp,
+        'comp_balance': comp_balance,
+        'form': form,
+        'transactions': transactions,
+    })

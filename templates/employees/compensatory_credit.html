@@ -1,0 +1,69 @@
+{% extends "base/base.html" %}
+{% block title %}Cấp giờ bù — {{ emp.full_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-clock-history"></i> Nghỉ bù — {{ emp.full_name }} ({{ emp.code }})</h4>
+  <a href="{% url 'employees:leave_management' %}" class="btn btn-outline-secondary btn-sm">← Quay lại</a>
+</div>
+
+<div class="mb-3">
+  <div class="card border-warning d-inline-block px-4 py-2 text-center">
+    <div class="text-muted small">Còn lại</div>
+    <div class="fs-3 fw-bold text-warning">{{ comp_balance.remaining_hours }}h</div>
+    <div class="text-muted small">Tổng {{ comp_balance.total_hours }}h / Đã dùng {{ comp_balance.used_hours }}h</div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-12 col-md-5">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-primary text-white fw-bold">Cấp giờ bù mới</div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-2">
+            <label class="form-label">{{ form.hours.label }}</label>
+            {{ form.hours }}
+          </div>
+          <div class="mb-2">
+            <label class="form-label">{{ form.date.label }}</label>
+            {{ form.date }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">{{ form.note.label }}</label>
+            {{ form.note }}
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Cấp bù</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-7">
+    <h6>Lịch sử giao dịch (30 gần nhất)</h6>
+    <table class="table table-sm table-bordered">
+      <thead class="table-light">
+        <tr><th>Ngày</th><th>Loại</th><th>Giờ</th><th>Ghi chú</th><th>Người tạo</th></tr>
+      </thead>
+      <tbody>
+        {% for t in transactions %}
+        <tr>
+          <td>{{ t.date }}</td>
+          <td>
+            {% if t.transaction_type == 'credit' %}
+            <span class="badge bg-success">Cấp</span>
+            {% else %}
+            <span class="badge bg-secondary">Dùng</span>
+            {% endif %}
+          </td>
+          <td>{{ t.hours }}h</td>
+          <td>{{ t.note|default:"—" }}</td>
+          <td>{{ t.created_by.email|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted">Chưa có giao dịch.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

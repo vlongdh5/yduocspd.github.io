@@ -1,4 +1,5 @@
 from django import forms
+from decimal import Decimal
 from .models import Employee, LeaveBalance
 
 
@@ -84,3 +85,19 @@ class LeaveBalanceForm(forms.ModelForm):
             'total_days': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5'}),
             'used_days': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5'}),
         }
+
+
+class CompensatoryCreditForm(forms.Form):
+    hours = forms.DecimalField(
+        max_digits=4, decimal_places=1, min_value=Decimal('0.5'),
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5'}),
+        label='Số giờ cấp bù'
+    )
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+        label='Ngày'
+    )
+    note = forms.CharField(
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+        label='Ghi chú', required=False
+    )
