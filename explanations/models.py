@@ -68,6 +68,10 @@ class Explanation(models.Model):
     co_reviewed_at = models.DateTimeField(null=True, blank=True)
     co_reviewer_note = models.TextField(blank=True)
 
+    # --- Compensatory flags ---
+    ci_use_compensatory = models.BooleanField(default=False)
+    co_use_compensatory = models.BooleanField(default=False)
+
     # --- Computed properties ---
 
     @property

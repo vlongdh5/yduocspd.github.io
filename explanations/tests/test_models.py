@@ -110,3 +110,21 @@ def test_compensatory_reasons_seeded():
     call_command('seed_explanation_reasons')
     assert ExplanationReason.objects.filter(name='Nghỉ bù cả ngày', is_compensatory=True).exists()
     assert ExplanationReason.objects.filter(name='Nghỉ bù nửa ngày', is_compensatory=True).exists()
+
+
+@pytest.mark.django_db
+def test_explanation_compensatory_flags_default_false(db):
+    from attendance.models import AttendanceRecord, AttendanceUpload
+    from employees.models import Employee, Department
+    from accounts.models import User
+    user = User.objects.create_user(email='e@e.com', password='pass')
+    dept = Department.objects.create(name='D')
+    emp = Employee.objects.create(user=user, code='E01', full_name='E', department=dept)
+    hr = User.objects.create_user(email='hr@e.com', password='pass')
+    upload = AttendanceUpload.objects.create(month='2026-05', uploaded_by=hr, status='done')
+    record = AttendanceRecord.objects.create(
+        upload=upload, employee=emp, date='2026-05-01', error_types=[]
+    )
+    exp = Explanation.objects.create(record=record, employee=emp)
+    assert exp.ci_use_compensatory is False
+    assert exp.co_use_compensatory is False
