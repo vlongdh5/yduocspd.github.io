@@ -13,7 +13,6 @@
 
     <!-- Nav -->
     <nav class="sidebar-nav flex-grow-1 px-2 pb-2">
-        <!-- Employee / chung -->
         <a href="/attendance/"
            class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if request.path == '/attendance/' %}active{% endif %}"
            data-bs-toggle="tooltip" data-bs-placement="right" title="Chấm công">
@@ -41,7 +40,7 @@
 
         {% if user.is_hr %}
         <div class="sidebar-section-label px-2 mt-3 mb-1">
-            <small class="text-uppercase fw-semibold" style="font-size: 0.65rem; letter-spacing: 0.08em; color: #64748b;">HR</small>
+            <small>HR</small>
         </div>
         <a href="/attendance/upload/"
            class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/attendance/upload' in request.path %}active{% endif %}"
@@ -65,7 +64,7 @@
 
         {% if user.is_superuser %}
         <div class="sidebar-section-label px-2 mt-3 mb-1">
-            <small class="text-uppercase fw-semibold" style="font-size: 0.65rem; letter-spacing: 0.08em; color: #64748b;">Hệ thống</small>
+            <small>Hệ thống</small>
         </div>
         <a href="/accounts/config/"
            class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/accounts/config' in request.path %}active{% endif %}"
@@ -77,12 +76,12 @@
     </nav>
 
     <!-- Footer -->
-    <div class="sidebar-footer border-top px-2 py-2" style="border-color: #334155 !important;">
+    <div class="sidebar-footer px-2 py-2">
         <a href="/accounts/otp/setup-totp/"
            class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none"
            data-bs-toggle="tooltip" data-bs-placement="right" title="Cài Google Authenticator">
             <i class="bi bi-shield-lock fs-5"></i>
-            <span class="sidebar-label text-truncate" style="max-width: 140px;">{{ user.email }}</span>
+            <span class="sidebar-label sidebar-user-email">{{ user.email }}</span>
         </a>
         <form method="post" action="/accounts/logout/" class="m-0">
             {% csrf_token %}
@@ -90,7 +89,7 @@
                     class="sidebar-item btn btn-link w-100 d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none text-start"
                     data-bs-toggle="tooltip" data-bs-placement="right" title="Đăng xuất">
                 <i class="bi bi-box-arrow-right fs-5"></i>
-                <span class="sidebar-label" style="color: #f87171;">Đăng xuất</span>
+                <span class="sidebar-label sidebar-logout">Đăng xuất</span>
             </button>
         </form>
     </div>
