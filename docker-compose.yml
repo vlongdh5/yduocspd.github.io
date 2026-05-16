@@ -30,7 +30,6 @@ services:
     image: nginx:1.26-alpine
     restart: unless-stopped
     ports:
-      - "80:80"
       - "443:443"
     volumes:
       - ./nginx/hrms.conf:/etc/nginx/conf.d/hrms.conf:ro

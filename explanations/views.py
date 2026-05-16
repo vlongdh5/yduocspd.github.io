@@ -182,11 +182,13 @@ def review_explanation(request, pk):
                 exp.ci_reviewer_note = ''
                 exp.save()
                 messages.success(request, 'Đã đặt lại CI về Chờ duyệt.')
-            elif exp.ci_status == Explanation.Status.PENDING:
-                if action == 'approve':
-                    exp.ci_status = Explanation.Status.APPROVED
-                elif action == 'reject':
-                    exp.ci_status = Explanation.Status.REJECTED
+            elif action in ('approve', 'reject') and exp.ci_status in (
+                Explanation.Status.PENDING,
+                Explanation.Status.APPROVED,
+                Explanation.Status.REJECTED,
+            ):
+                new_status = Explanation.Status.APPROVED if action == 'approve' else Explanation.Status.REJECTED
+                exp.ci_status = new_status
                 exp.ci_reviewed_by = request.user
                 exp.ci_reviewed_at = timezone.now()
                 exp.ci_reviewer_note = reviewer_note
@@ -200,11 +202,13 @@ def review_explanation(request, pk):
                 exp.co_reviewer_note = ''
                 exp.save()
                 messages.success(request, 'Đã đặt lại CO về Chờ duyệt.')
-            elif exp.co_status == Explanation.Status.PENDING:
-                if action == 'approve':
-                    exp.co_status = Explanation.Status.APPROVED
-                elif action == 'reject':
-                    exp.co_status = Explanation.Status.REJECTED
+            elif action in ('approve', 'reject') and exp.co_status in (
+                Explanation.Status.PENDING,
+                Explanation.Status.APPROVED,
+                Explanation.Status.REJECTED,
+            ):
+                new_status = Explanation.Status.APPROVED if action == 'approve' else Explanation.Status.REJECTED
+                exp.co_status = new_status
                 exp.co_reviewed_by = request.user
                 exp.co_reviewed_at = timezone.now()
                 exp.co_reviewer_note = reviewer_note
@@ -235,9 +239,14 @@ def bulk_review(request):
     if action not in ('approve', 'reject'):
         return redirect('explanations:pending_approvals')
 
-    ids = request.POST.getlist('exp_ids')
-    if not ids:
+    raw_ids = request.POST.getlist('exp_ids')
+    if not raw_ids:
         messages.warning(request, 'Chưa chọn giải trình nào.')
+        return redirect('explanations:pending_approvals')
+    try:
+        ids = [int(i) for i in raw_ids]
+    except (ValueError, TypeError):
+        messages.error(request, 'Dữ liệu không hợp lệ.')
         return redirect('explanations:pending_approvals')
 
     qs = Explanation.objects.filter(pk__in=ids)

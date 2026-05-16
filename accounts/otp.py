@@ -19,8 +19,16 @@ class TOTPManager:
 
     @staticmethod
     def verify(secret: str, code: str) -> bool:
+        from django.core.cache import cache
         totp = pyotp.TOTP(secret)
-        return totp.verify(code, valid_window=1)
+        if not totp.verify(code, valid_window=1):
+            return False
+        # Prevent replay within the 90-second validity window
+        replay_key = f'totp_used_{secret[-8:]}_{code}'
+        if cache.get(replay_key):
+            return False
+        cache.set(replay_key, True, timeout=90)
+        return True
 
     @staticmethod
     def generate_qr_code_base64(secret: str, email: str) -> str:

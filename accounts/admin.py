@@ -10,7 +10,7 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ['email']
     ordering = ['email']
     fieldsets = BaseUserAdmin.fieldsets + (
-        ('Role & OTP', {'fields': ('role', 'extra_roles', 'totp_secret', 'otp_method')}),
+        ('Role & OTP', {'fields': ('role', 'extra_roles', 'otp_method')}),
     )
 
     def full_name_display(self, obj):

@@ -3,6 +3,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from reports.models import AttendanceCalculation
 from employees.models import LeaveBalance
+from explanations.models import Explanation
 
 _ERROR_LABELS = {
     'LATE': 'Đi muộn',
@@ -80,6 +81,8 @@ def _build_detail_rows(month: str):
             'dept': emp.department.name if emp.department_id else '',
             'date': record.date,
             'shift_code': record.shift_code or '-',
+            'actual_ci': record.check_in.strftime('%H:%M') if record.check_in else '-',
+            'actual_co': record.check_out.strftime('%H:%M') if record.check_out else '-',
             'error_label': error_label,
             'minutes_late': record.minutes_late if record.minutes_late is not None else '-',
             'minutes_early': record.minutes_early if record.minutes_early is not None else '-',
@@ -175,7 +178,7 @@ def export_calculation_excel(month: str, output_path: str):
     # ── Sheet 2: Chi tiết từng ngày ────────────────────────────────────────
     ws2 = wb.create_sheet(title=f'Chi tiết {month}')
 
-    ws2.merge_cells('A1:O1')
+    ws2.merge_cells('A1:R1')
     ws2['A1'] = f'CHI TIẾT CHẤM CÔNG TỪNG NGÀY THÁNG {month}'
     ws2['A1'].font = title_font
     ws2['A1'].fill = title_fill
@@ -185,6 +188,7 @@ def export_calculation_excel(month: str, output_path: str):
 
     headers2 = [
         'STT', 'Mã NV', 'Họ tên', 'Phòng ban', 'Ngày', 'Ca',
+        'Giờ vào TT', 'Giờ ra TT',
         'Loại lỗi', 'Phút vào muộn', 'Phút ra sớm', 'Vị trí lỗi',
         'Lý do giải trình vào', 'Phê duyệt vào',
         'Lý do giải trình ra', 'Phê duyệt ra',
@@ -206,12 +210,13 @@ def export_calculation_excel(month: str, output_path: str):
     rejected_fill = PatternFill(start_color='FCE4D6', end_color='FCE4D6', fill_type='solid')  # light red
 
     detail_rows = _build_detail_rows(month)
-    center_cols2 = {1, 2, 5, 6, 8, 9, 10, 12, 14, 15, 16}
+    center_cols2 = {1, 2, 5, 6, 7, 8, 10, 11, 12, 14, 16, 17, 18}
 
     for i, r in enumerate(detail_rows, 1):
         row_data = [
             i, r['emp_code'], r['emp_name'], r['dept'],
             r['date'].strftime('%d/%m/%Y'), r['shift_code'],
+            r['actual_ci'], r['actual_co'],
             r['error_label'],
             r['minutes_late'], r['minutes_early'], r['error_position'],
             r['ci_reason'], r['ci_status'],
@@ -238,7 +243,7 @@ def export_calculation_excel(month: str, output_path: str):
             if col in center_cols2:
                 cell.alignment = center
 
-    col_widths2 = [6, 10, 25, 18, 12, 14, 20, 14, 14, 18, 28, 14, 28, 14, 12, 12]
+    col_widths2 = [6, 10, 25, 18, 12, 14, 10, 10, 20, 14, 14, 18, 28, 14, 28, 14, 12, 12]
     for col, width in enumerate(col_widths2, 1):
         ws2.column_dimensions[get_column_letter(col)].width = width
 

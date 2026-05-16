@@ -38,6 +38,17 @@ class EmployeeForm(forms.ModelForm):
             self.fields['email'].initial = self.instance.user.email
             self.fields['role'].initial = self.instance.user.role
 
+    def clean_password(self):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        password = self.cleaned_data.get('password')
+        if password:
+            try:
+                validate_password(password)
+            except DjangoValidationError as e:
+                raise forms.ValidationError(e.messages)
+        return password
+
     def save(self, commit=True):
         from accounts.models import User
         emp = super().save(commit=False)

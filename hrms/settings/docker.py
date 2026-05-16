@@ -8,8 +8,6 @@ CSRF_COOKIE_SECURE = True
 
 _extra = [o.strip() for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
 CSRF_TRUSTED_ORIGINS = [
-    'https://*.trycloudflare.com',
-    'https://*.ngrok-free.dev',
-    'https://*.ngrok-free.app',
-    'https://localhost',
+    'https://yduocsaophuongdong.site',
+    'https://www.yduocsaophuongdong.site',
 ] + _extra

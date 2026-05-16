@@ -88,15 +88,21 @@ def calculate_view(request):
 
         elif action == 'export':
             tmp = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+            tmp_path = tmp.name
             tmp.close()
-            export_calculation_excel(selected_month, tmp.name)
-            response = FileResponse(
-                open(tmp.name, 'rb'),
-                as_attachment=True,
-                filename=f'bang_tong_hop_cong_{selected_month}.xlsx'
-            )
-            os.unlink(tmp.name)
-            return response
+            try:
+                export_calculation_excel(selected_month, tmp_path)
+                response = FileResponse(
+                    open(tmp_path, 'rb'),
+                    as_attachment=True,
+                    filename=f'bang_tong_hop_cong_{selected_month}.xlsx'
+                )
+                response['X-Accel-Buffering'] = 'no'
+                os.unlink(tmp_path)
+                return response
+            except Exception:
+                os.unlink(tmp_path)
+                raise
 
     not_submitted, pending, reviewed = [], [], []
     if selected_month:

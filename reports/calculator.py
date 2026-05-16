@@ -26,11 +26,12 @@ class RC:
     Code            | Tiếng Việt          | Ý nghĩa
     ----------------|---------------------|----------------------------------------
     OK              | Công                | Không lỗi / đã tha — không trừ gì
-    DAY_OFF         | Nghỉ                | Nghỉ cả phiên (phép hoặc không lương)
+    DAY_OFF         | Nghỉ phép           | Nghỉ phép cả ngày — trừ vào phép
     UNEXCUSED       | Không (trừ phút)    | LATE/EARLY chưa duyệt — trừ đúng phút
     UNEXCUSED_BLOCK | Không (trừ block)   | MISSING_IN/OUT chưa duyệt — trừ cả nửa ngày
     LEAVE           | Phép (phút)         | Duyệt phép — phút trừ vào số giờ phép
     LEAVE_BLOCK     | Phép (nửa ngày)     | Duyệt nghỉ nửa ngày — block trừ vào số giờ phép
+    UNPAID_BLOCK    | NKL (nửa ngày)      | Nghỉ không lương nửa buổi — trừ block khỏi công, không trừ phép
     """
     OK = 'OK'
     DAY_OFF = 'DAY_OFF'
@@ -38,6 +39,7 @@ class RC:
     UNEXCUSED_BLOCK = 'UNEXCUSED_BLOCK'
     LEAVE = 'LEAVE'
     LEAVE_BLOCK = 'LEAVE_BLOCK'
+    UNPAID_BLOCK = 'UNPAID_BLOCK'
 
 
 def _to_minutes(t: time) -> int:
@@ -78,8 +80,10 @@ def _ci_result(error_set, ci_reason, ci_approved):
     rn = ci_reason.name
     if rn in LEAVE_HALF_DAY_REASONS:
         return RC.LEAVE_BLOCK
-    if rn in LEAVE_FULL_DAY_REASONS or rn in UNPAID_REASONS:
+    if rn in LEAVE_FULL_DAY_REASONS:
         return RC.DAY_OFF
+    if rn in UNPAID_REASONS:
+        return RC.UNPAID_BLOCK
     if rn in LEAVE_REASONS:
         return RC.LEAVE
     return RC.OK  # EXCUSED_REASONS and any unknown approved = excused
@@ -95,8 +99,10 @@ def _co_result(error_set, co_reason, co_approved):
     rn = co_reason.name
     if rn in LEAVE_HALF_DAY_REASONS:
         return RC.LEAVE_BLOCK
-    if rn in LEAVE_FULL_DAY_REASONS or rn in UNPAID_REASONS:
+    if rn in LEAVE_FULL_DAY_REASONS:
         return RC.DAY_OFF
+    if rn in UNPAID_REASONS:
+        return RC.UNPAID_BLOCK
     if rn in LEAVE_REASONS:
         return RC.LEAVE
     return RC.OK
@@ -123,6 +129,9 @@ def _apply_adj(result, minutes, shift, session):
         h = m / 60
         return (-h, h) if result == RC.LEAVE else (-h, 0.0)
     if result == RC.UNEXCUSED_BLOCK:
+        block = _morning_block_hours(shift) if session == 'morning' else _afternoon_block_hours(shift)
+        return -block, 0.0
+    if result == RC.UNPAID_BLOCK:
         block = _morning_block_hours(shift) if session == 'morning' else _afternoon_block_hours(shift)
         return -block, 0.0
     if result == RC.LEAVE_BLOCK:
@@ -169,12 +178,21 @@ def compute_record_hours(record, exp, shift, qcc_count):
                 return 0.0, base_work  # full day deducted from leave balance
             if reason.name in UNPAID_REASONS:
                 return 0.0, 0.0  # unpaid
+            if reason.name in EXCUSED_REASONS:
+                if _is_qcc_record(exp) and qcc_count >= 3:
+                    half = round(base_work / 2, 2)
+                    return half, half
+                return base_work, base_leave
         return 0.0, 0.0  # unapproved/no explanation = unpaid
 
     result_ci = _ci_result(error_set, ci_reason, ci_approved)
     result_co = _co_result(error_set, co_reason, co_approved)
 
-    # Both sides off = full day off
+    # Both sides NKL = vắng mặt không lương, không trừ phép
+    if result_ci == RC.UNPAID_BLOCK and result_co == RC.UNPAID_BLOCK:
+        return 0.0, 0.0
+
+    # Both sides off = full day leave
     if result_ci == RC.DAY_OFF and result_co == RC.DAY_OFF:
         ci_leave = ci_reason and ci_reason.name in LEAVE_FULL_DAY_REASONS
         co_leave = co_reason and co_reason.name in LEAVE_FULL_DAY_REASONS
@@ -232,13 +250,14 @@ def _validate_month(month: str) -> dict:
 
         ci_submitted = exp and exp.ci_reason_id is not None
         co_submitted = exp and exp.co_reason_id is not None
-        ci_approved = exp and exp.ci_status == Explanation.Status.APPROVED
-        co_approved = exp and exp.co_status == Explanation.Status.APPROVED
+        ci_pending = exp and exp.ci_status == Explanation.Status.PENDING
+        co_pending = exp and exp.co_status == Explanation.Status.PENDING
 
         if (needs_ci and not ci_submitted) or (needs_co and not co_submitted):
             not_submitted.add(record.employee.code)
-        elif (needs_ci and not ci_approved) or (needs_co and not co_approved):
+        elif (needs_ci and ci_pending) or (needs_co and co_pending):
             not_approved.add(record.employee.code)
+        # rejected = TBP đã xử lý xong (từ chối), tính công bình thường (NV bị trừ)
 
     return {'not_submitted': sorted(not_submitted), 'not_approved': sorted(not_approved)}
 
@@ -249,7 +268,7 @@ def calculate_month(month: str, calculated_by: User) -> dict:
     if issues['not_submitted']:
         errors.append(f'{len(issues["not_submitted"])} NV chưa nộp giải trình: {", ".join(issues["not_submitted"])}')
     if issues['not_approved']:
-        errors.append(f'{len(issues["not_approved"])} NV chờ/từ chối chưa được duyệt: {", ".join(issues["not_approved"])}')
+        errors.append(f'{len(issues["not_approved"])} NV còn giải trình chờ TBP duyệt: {", ".join(issues["not_approved"])}')
     if errors:
         raise ValueError(' | '.join(errors))
 

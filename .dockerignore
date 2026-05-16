@@ -12,3 +12,4 @@ staticfiles/
 docs/
 pytest.ini
 nginx/ssl/
+nginx/letsencrypt/

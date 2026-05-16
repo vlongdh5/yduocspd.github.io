@@ -146,16 +146,18 @@
     </div>
 </div>
 
+{% block extra_js %}
 <script>
 function toggleAll() {
-    const cbs = document.querySelectorAll('.bulk-cb');
-    const anyUnchecked = [...cbs].some(cb => !cb.checked);
-    cbs.forEach(cb => cb.checked = anyUnchecked);
+    const cbs = document.querySelectorAll('#tab-pending .bulk-cb');
+    const anyUnchecked = Array.from(cbs).some(cb => !cb.checked);
+    cbs.forEach(cb => { cb.checked = anyUnchecked; });
 }
 function confirmBulk(label) {
-    const count = document.querySelectorAll('.bulk-cb:checked').length;
+    const count = document.querySelectorAll('#tab-pending .bulk-cb:checked').length;
     if (!count) { alert('Chưa chọn giải trình nào.'); return false; }
     return confirm(label.charAt(0).toUpperCase() + label.slice(1) + ' ' + count + ' giải trình đã chọn?');
 }
 </script>
+{% endblock %}
 {% endblock %}

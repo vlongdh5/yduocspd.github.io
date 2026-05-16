@@ -3,6 +3,8 @@ from django.contrib.auth import authenticate, login, logout
 from django.views import View
 from django.contrib import messages
 from django.core.cache import cache
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 from .forms import LoginForm, OTPVerifyForm
 from .otp import is_otp_enabled, TOTPManager
 from .models import User
@@ -14,8 +16,15 @@ _OTP_LOCKOUT_SECONDS = 600     # 10 phút
 
 
 def _client_ip(request):
-    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
-    return forwarded.split(',')[0].strip() if forwarded else request.META.get('REMOTE_ADDR', '')
+    # X-Real-IP is set by nginx from $remote_addr — cannot be spoofed by client.
+    return request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR', '')
+
+
+def _safe_next(request, fallback='/'):
+    next_url = request.GET.get('next') or request.session.pop('next_url', None) or fallback
+    if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        return next_url
+    return fallback
 
 
 def _is_locked(key):
@@ -26,6 +35,11 @@ def _record_failure(key, ttl):
     count = cache.get(key, 0) + 1
     cache.set(key, count, ttl)
     return count
+
+
+def _requires_otp(user):
+    # Require OTP if globally enabled OR if user has already enrolled TOTP
+    return is_otp_enabled() or (user.otp_method == 'totp' and bool(user.totp_secret))
 
 
 class LoginView(View):
@@ -64,8 +78,12 @@ class LoginView(View):
 
         cache.delete(lock_key)  # reset on success
 
-        if is_otp_enabled():
+        if _requires_otp(user):
             request.session['pre_otp_user_id'] = user.pk
+            # Preserve next URL through OTP flow
+            next_url = request.GET.get('next', '')
+            if next_url:
+                request.session['next_url'] = next_url
             if user.otp_method == 'totp' and user.totp_secret:
                 request.session['otp_method'] = 'totp'
             else:
@@ -73,7 +91,7 @@ class LoginView(View):
             return redirect('accounts:verify_otp')
 
         login(request, user)
-        return redirect(request.GET.get('next', '/'))
+        return redirect(_safe_next(request))
 
 
 def _send_email_otp(request, user):
@@ -128,7 +146,7 @@ class OTPVerifyView(View):
             cache.delete(otp_key)
             del request.session['pre_otp_user_id']
             login(request, user)
-            return redirect(request.GET.get('next', '/'))
+            return redirect(_safe_next(request))
 
         _record_failure(otp_key, _OTP_LOCKOUT_SECONDS)
         messages.error(request, 'Mã OTP không đúng hoặc đã hết hạn.')
@@ -148,6 +166,14 @@ class SetupTOTPView(View):
         return render(request, self.template_name, {'qr_code': qr})
 
     def post(self, request):
+        if not request.user.is_authenticated:
+            return redirect('accounts:login')
+        # Require current password before activating TOTP to prevent session-hijack enrollment
+        current_password = request.POST.get('current_password', '')
+        if not request.user.check_password(current_password):
+            messages.error(request, 'Mật khẩu hiện tại không đúng.')
+            qr = TOTPManager.generate_qr_code_base64(request.user.totp_secret, request.user.email)
+            return render(request, self.template_name, {'qr_code': qr, 'password_error': True})
         code = request.POST.get('code', '')
         if TOTPManager.verify(request.user.totp_secret, code):
             request.user.otp_method = 'totp'
@@ -159,6 +185,7 @@ class SetupTOTPView(View):
         return render(request, self.template_name, {'qr_code': qr})
 
 
+@require_POST
 def logout_view(request):
     logout(request)
     return redirect('accounts:login')
