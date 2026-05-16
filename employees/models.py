@@ -67,3 +67,53 @@ class LeaveTransaction(models.Model):
     class Meta:
         verbose_name = 'Giao dịch phép'
         ordering = ['-date']
+
+
+class CompensatoryBalance(models.Model):
+    employee = models.OneToOneField(
+        Employee, on_delete=models.CASCADE, related_name='compensatory_balance'
+    )
+    total_hours = models.DecimalField(max_digits=6, decimal_places=1, default=0)
+    used_hours = models.DecimalField(max_digits=6, decimal_places=1, default=0)
+
+    @property
+    def remaining_hours(self):
+        return self.total_hours - self.used_hours
+
+    class Meta:
+        verbose_name = 'Số giờ nghỉ bù'
+
+    def __str__(self):
+        return f'{self.employee.code} - bù còn {self.remaining_hours}h'
+
+
+class CompensatoryTransaction(models.Model):
+    class Type(models.TextChoices):
+        CREDIT = 'credit', 'Cấp bù'
+        DEBIT = 'debit', 'Dùng bù'
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name='compensatory_transactions'
+    )
+    balance = models.ForeignKey(
+        CompensatoryBalance, on_delete=models.CASCADE, related_name='transactions'
+    )
+    transaction_type = models.CharField(max_length=10, choices=Type.choices)
+    hours = models.DecimalField(max_digits=4, decimal_places=1)
+    date = models.DateField()
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='compensatory_created'
+    )
+    explanation = models.OneToOneField(
+        'explanations.Explanation', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='compensatory_transaction'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Giao dịch nghỉ bù'
+        ordering = ['-date', '-created_at']
+
+    def __str__(self):
+        return f'{self.employee.code} {self.transaction_type} {self.hours}h {self.date}'
