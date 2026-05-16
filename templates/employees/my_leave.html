@@ -1,0 +1,228 @@
+{% extends "base/base.html" %}
+{% block title %}Số dư nghỉ phép & nghỉ bù{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-calendar3"></i> Số dư nghỉ phép &amp; nghỉ bù</h4>
+</div>
+
+{% if not employee %}
+<div class="alert alert-warning">Tài khoản này chưa được liên kết với hồ sơ nhân viên.</div>
+{% else %}
+
+<!-- Balance Cards -->
+<div class="row g-3 mb-4">
+    <!-- Leave balance card -->
+    <div class="col-12 col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-primary text-white fw-semibold">
+                <i class="bi bi-calendar-check me-1"></i> Số ngày phép còn lại
+            </div>
+            <div class="card-body">
+                {% if leave_balance %}
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="fs-3 fw-bold text-primary">{{ leave_balance.total_days }}</div>
+                        <div class="small text-muted">Tổng phép</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="fs-3 fw-bold text-warning">{{ leave_balance.used_days }}</div>
+                        <div class="small text-muted">Đã dùng</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="fs-3 fw-bold text-success">{{ leave_balance.remaining_days }}</div>
+                        <div class="small text-muted">Còn lại</div>
+                    </div>
+                </div>
+                <div class="mt-2 text-center text-muted small">Năm {{ leave_balance.year }}</div>
+                {% else %}
+                <p class="text-muted mb-0">Chưa có dữ liệu</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Compensatory balance card -->
+    <div class="col-12 col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-success text-white fw-semibold">
+                <i class="bi bi-clock-history me-1"></i> Số giờ nghỉ bù còn lại
+            </div>
+            <div class="card-body">
+                {% if comp_balance %}
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="fs-3 fw-bold text-primary">{{ comp_balance.total_hours }}</div>
+                        <div class="small text-muted">Tổng bù</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="fs-3 fw-bold text-warning">{{ comp_balance.used_hours }}</div>
+                        <div class="small text-muted">Đã dùng</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="fs-3 fw-bold text-success">{{ comp_balance.remaining_hours }}</div>
+                        <div class="small text-muted">Còn lại (giờ)</div>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Chưa có dữ liệu</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Year filter (affects leave-history tab) -->
+<div class="d-flex align-items-center gap-2 mb-3">
+    <label class="form-label mb-0 fw-semibold">Năm:</label>
+    <select class="form-select w-auto" onchange="applyYearFilter(this.value)">
+        {% for y in year_range %}
+        <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-3" id="leaveTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if active_tab == 'leave' %}active{% endif %}"
+                id="tab-leave" data-bs-toggle="tab" data-bs-target="#pane-leave"
+                type="button" role="tab">
+            <i class="bi bi-calendar3 me-1"></i> Lịch sử nghỉ phép
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if active_tab == 'comp' %}active{% endif %}"
+                id="tab-comp" data-bs-toggle="tab" data-bs-target="#pane-comp"
+                type="button" role="tab">
+            <i class="bi bi-clock-history me-1"></i> Lịch sử nghỉ bù
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <!-- Leave history tab -->
+    <div class="tab-pane fade {% if active_tab == 'leave' %}show active{% endif %}"
+         id="pane-leave" role="tabpanel">
+        {% if leave_page and leave_page.object_list %}
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Ngày</th>
+                        <th>Số ngày</th>
+                        <th>Tháng</th>
+                        <th>Ghi chú</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in leave_page %}
+                    <tr>
+                        <td>{{ tx.date }}</td>
+                        <td>{{ tx.days }}</td>
+                        <td>{{ tx.month }}</td>
+                        <td>{{ tx.note|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <!-- Leave pagination -->
+        {% if leave_page.has_other_pages %}
+        <nav>
+            <ul class="pagination pagination-sm justify-content-center">
+                {% if leave_page.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?tab=leave&year={{ year }}&lpage={{ leave_page.previous_page_number }}">«</a>
+                </li>
+                {% endif %}
+                {% for num in leave_page.paginator.page_range %}
+                <li class="page-item {% if num == leave_page.number %}active{% endif %}">
+                    <a class="page-link" href="?tab=leave&year={{ year }}&lpage={{ num }}">{{ num }}</a>
+                </li>
+                {% endfor %}
+                {% if leave_page.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?tab=leave&year={{ year }}&lpage={{ leave_page.next_page_number }}">»</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+        {% else %}
+        <p class="text-muted">Chưa có dữ liệu giao dịch phép cho năm {{ year }}.</p>
+        {% endif %}
+    </div>
+
+    <!-- Compensatory history tab -->
+    <div class="tab-pane fade {% if active_tab == 'comp' %}show active{% endif %}"
+         id="pane-comp" role="tabpanel">
+        {% if comp_page and comp_page.object_list %}
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Ngày</th>
+                        <th>Loại</th>
+                        <th>Số giờ</th>
+                        <th>Ghi chú</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in comp_page %}
+                    <tr>
+                        <td>{{ tx.date }}</td>
+                        <td>
+                            {% if tx.transaction_type == 'credit' %}
+                            <span class="badge bg-success">Cấp bù</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Dùng bù</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ tx.hours }}</td>
+                        <td>{{ tx.note|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <!-- Comp pagination -->
+        {% if comp_page.has_other_pages %}
+        <nav>
+            <ul class="pagination pagination-sm justify-content-center">
+                {% if comp_page.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?tab=comp&year={{ year }}&cpage={{ comp_page.previous_page_number }}">«</a>
+                </li>
+                {% endif %}
+                {% for num in comp_page.paginator.page_range %}
+                <li class="page-item {% if num == comp_page.number %}active{% endif %}">
+                    <a class="page-link" href="?tab=comp&year={{ year }}&cpage={{ num }}">{{ num }}</a>
+                </li>
+                {% endfor %}
+                {% if comp_page.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?tab=comp&year={{ year }}&cpage={{ comp_page.next_page_number }}">»</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+        {% else %}
+        <p class="text-muted">Chưa có dữ liệu giao dịch nghỉ bù.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function applyYearFilter(year) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('year', year);
+    url.searchParams.delete('lpage');
+    window.location.href = url.toString();
+}
+</script>
+{% endblock %}
