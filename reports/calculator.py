@@ -80,6 +80,10 @@ def _ci_result(error_set, ci_reason, ci_approved):
     rn = ci_reason.name
     if rn in LEAVE_HALF_DAY_REASONS:
         return RC.LEAVE_BLOCK
+    if ci_reason.is_compensatory:
+        if ci_reason.requires_full_day_shift:
+            return RC.LEAVE_BLOCK
+        return RC.DAY_OFF
     if rn in LEAVE_FULL_DAY_REASONS:
         return RC.DAY_OFF
     if rn in UNPAID_REASONS:
@@ -99,6 +103,10 @@ def _co_result(error_set, co_reason, co_approved):
     rn = co_reason.name
     if rn in LEAVE_HALF_DAY_REASONS:
         return RC.LEAVE_BLOCK
+    if co_reason.is_compensatory:
+        if co_reason.requires_full_day_shift:
+            return RC.LEAVE_BLOCK
+        return RC.DAY_OFF
     if rn in LEAVE_FULL_DAY_REASONS:
         return RC.DAY_OFF
     if rn in UNPAID_REASONS:
@@ -153,7 +161,7 @@ def _is_qcc_record(exp):
 
 def compute_record_hours(record, exp, shift, qcc_count):
     """
-    Compute (work_hours, leave_hours) for a single attendance record.
+    Compute (work_hours, leave_hours, compensatory_hours) for a single attendance record.
 
     qcc_count: cumulative QCC occurrences up to and including this record for the employee this month.
     """
@@ -162,72 +170,89 @@ def compute_record_hours(record, exp, shift, qcc_count):
     base_leave = float(shift.leave_hours) if shift else 0.0
 
     if not error_set:
-        return base_work, base_leave
+        return base_work, base_leave, 0.0
 
     ci_reason = exp.ci_reason if exp else None
     co_reason = exp.co_reason if exp else None
     ci_approved = bool(exp and exp.ci_status == Explanation.Status.APPROVED)
     co_approved = bool(exp and exp.co_status == Explanation.Status.APPROVED)
+    ci_use_comp = bool(exp and exp.ci_use_compensatory)
+    co_use_comp = bool(exp and exp.co_use_compensatory)
 
-    # Full-day absent: both CI and CO missing
     if 'ABSENT' in error_set:
         reason = ci_reason or co_reason
         approved = ci_approved or co_approved
         if approved and reason:
+            if reason.is_compensatory:
+                return 0.0, 0.0, base_work
             if reason.name in LEAVE_FULL_DAY_REASONS:
-                return 0.0, base_work  # full day deducted from leave balance
+                return 0.0, base_work, 0.0
             if reason.name in UNPAID_REASONS:
-                return 0.0, 0.0  # unpaid
+                return 0.0, 0.0, 0.0
             if reason.name in EXCUSED_REASONS:
                 if _is_qcc_record(exp) and qcc_count >= 3:
                     half = round(base_work / 2, 2)
-                    return half, half
-                return base_work, base_leave
-        return 0.0, 0.0  # unapproved/no explanation = unpaid
+                    return half, half, 0.0
+                return base_work, base_leave, 0.0
+        return 0.0, 0.0, 0.0
 
     result_ci = _ci_result(error_set, ci_reason, ci_approved)
     result_co = _co_result(error_set, co_reason, co_approved)
 
-    # Both sides NKL = vắng mặt không lương, không trừ phép
     if result_ci == RC.UNPAID_BLOCK and result_co == RC.UNPAID_BLOCK:
-        return 0.0, 0.0
+        return 0.0, 0.0, 0.0
 
-    # Both sides off = full day leave
     if result_ci == RC.DAY_OFF and result_co == RC.DAY_OFF:
+        ci_comp = ci_reason and ci_reason.is_compensatory
+        co_comp = co_reason and co_reason.is_compensatory
+        if ci_comp or co_comp:
+            return 0.0, 0.0, base_work
         ci_leave = ci_reason and ci_reason.name in LEAVE_FULL_DAY_REASONS
         co_leave = co_reason and co_reason.name in LEAVE_FULL_DAY_REASONS
         if ci_leave or co_leave:
-            return 0.0, base_work
-        return 0.0, 0.0
+            return 0.0, base_work, 0.0
+        return 0.0, 0.0, 0.0
 
     d_work_ci, d_leave_ci = _apply_adj(result_ci, record.minutes_late, shift, 'morning')
     d_work_co, d_leave_co = _apply_adj(result_co, record.minutes_early, shift, 'afternoon')
 
+    comp = 0.0
+    if (ci_use_comp or (ci_reason and ci_reason.is_compensatory)) and d_leave_ci > 0:
+        comp += d_leave_ci
+        d_leave_ci = 0.0
+    if (co_use_comp or (co_reason and co_reason.is_compensatory)) and d_leave_co > 0:
+        comp += d_leave_co
+        d_leave_co = 0.0
+
     work = base_work + d_work_ci + d_work_co
     leave = base_leave + d_leave_ci + d_leave_co
 
-    # LEAVE_BLOCK overflow: when late/early minutes exceed the half-day block (excluding break),
-    # the excess spills into the other session and is counted as leave.
     if result_ci == RC.LEAVE_BLOCK and record.minutes_late and shift:
         overflow = record.minutes_late - _morning_block_hours(shift) * 60 - _break_minutes(shift)
         if overflow > 0:
             work -= overflow / 60
-            leave += overflow / 60
+            if ci_use_comp or (ci_reason and ci_reason.is_compensatory):
+                comp += overflow / 60
+            else:
+                leave += overflow / 60
+
     if result_co == RC.LEAVE_BLOCK and record.minutes_early and shift:
         overflow = record.minutes_early - _afternoon_block_hours(shift) * 60 - _break_minutes(shift)
         if overflow > 0:
             work -= overflow / 60
-            leave += overflow / 60
+            if co_use_comp or (co_reason and co_reason.is_compensatory):
+                comp += overflow / 60
+            else:
+                leave += overflow / 60
 
     work = max(work, 0.0)
 
-    # QCC lần 3+: split remaining work 50/50 with leave
     if _is_qcc_record(exp) and qcc_count >= 3:
         half = round(work / 2, 2)
         leave += half
         work = half
 
-    return round(work, 2), round(leave, 2)
+    return round(work, 2), round(leave, 2), round(comp, 2)
 
 
 def _validate_month(month: str) -> dict:
@@ -302,7 +327,7 @@ def calculate_month(month: str, calculated_by: User) -> dict:
             if _is_qcc_record(exp):
                 qcc_count += 1
 
-            w, l = compute_record_hours(record, exp, shift, qcc_count)
+            w, l, _c = compute_record_hours(record, exp, shift, qcc_count)
             total_work += w
             total_leave += l
 

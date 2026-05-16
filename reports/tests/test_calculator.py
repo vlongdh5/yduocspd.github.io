@@ -53,9 +53,10 @@ def _explanation(record, emp, ci_reason=None, ci_status=None, co_reason=None, co
 def test_ok_record_full_hours(base):
     shift = base['shift']
     record = _record(base['upload'], base['emp'], 1, [])
-    w, l = compute_record_hours(record, None, shift, 0)
+    w, l, c = compute_record_hours(record, None, shift, 0)
     assert w == 8.0
     assert l == 0.0
+    assert c == 0.0
 
 
 @pytest.mark.django_db
@@ -64,27 +65,30 @@ def test_late_approved_phep(base):
     record = _record(base['upload'], base['emp'], 1, ['LATE'], minutes_late=30)
     reason = _reason('Đi muộn/ Về sớm')
     exp = _explanation(record, base['emp'], ci_reason=reason, ci_status='approved')
-    w, l = compute_record_hours(record, exp, shift, 0)
+    w, l, c = compute_record_hours(record, exp, shift, 0)
     assert w == 7.5   # 30 min deducted from work → leave
     assert l == 0.5   # 30 min counted as leave
+    assert c == 0.0
 
 
 @pytest.mark.django_db
 def test_late_unpaid(base):
     shift = base['shift']
     record = _record(base['upload'], base['emp'], 1, ['LATE'], minutes_late=30)
-    w, l = compute_record_hours(record, None, shift, 0)
+    w, l, c = compute_record_hours(record, None, shift, 0)
     assert w == 7.5  # 30 min deducted unpaid
     assert l == 0.0
+    assert c == 0.0
 
 
 @pytest.mark.django_db
 def test_missing_in_no_explanation_block_unpaid(base):
     shift = base['shift']
     record = _record(base['upload'], base['emp'], 1, ['MISSING_IN'])
-    w, l = compute_record_hours(record, None, shift, 0)
+    w, l, c = compute_record_hours(record, None, shift, 0)
     assert w == 4.0  # morning block (08:00-12:00 = 4h) deducted
     assert l == 0.0
+    assert c == 0.0
 
 
 @pytest.mark.django_db
@@ -93,9 +97,10 @@ def test_missing_in_phep2(base):
     record = _record(base['upload'], base['emp'], 1, ['MISSING_IN'])
     reason = _reason('Nghỉ phép nửa ngày', full_day=True)
     exp = _explanation(record, base['emp'], ci_reason=reason, ci_status='approved')
-    w, l = compute_record_hours(record, exp, shift, 0)
+    w, l, c = compute_record_hours(record, exp, shift, 0)
     assert w == 4.0  # afternoon only
     assert l == 4.0  # morning as leave
+    assert c == 0.0
 
 
 @pytest.mark.django_db
@@ -104,18 +109,20 @@ def test_missing_in_approved_cong(base):
     record = _record(base['upload'], base['emp'], 1, ['MISSING_IN'])
     reason = _reason('Quên chấm công')
     exp = _explanation(record, base['emp'], ci_reason=reason, ci_status='approved')
-    w, l = compute_record_hours(record, exp, shift, 0)
+    w, l, c = compute_record_hours(record, exp, shift, 0)
     assert w == 8.0  # excused
     assert l == 0.0
+    assert c == 0.0
 
 
 @pytest.mark.django_db
 def test_early_leave_unpaid(base):
     shift = base['shift']
     record = _record(base['upload'], base['emp'], 1, ['EARLY_LEAVE'], minutes_early=45)
-    w, l = compute_record_hours(record, None, shift, 0)
+    w, l, c = compute_record_hours(record, None, shift, 0)
     assert w == 7.25  # 45 min deducted
     assert l == 0.0
+    assert c == 0.0
 
 
 @pytest.mark.django_db
@@ -124,11 +131,12 @@ def test_missing_out_phep2(base):
     record = _record(base['upload'], base['emp'], 1, ['MISSING_OUT'])
     reason = _reason('Nghỉ phép nửa ngày', full_day=True)
     exp = _explanation(record, base['emp'], co_reason=reason, co_status='approved')
-    w, l = compute_record_hours(record, exp, shift, 0)
+    w, l, c = compute_record_hours(record, exp, shift, 0)
     # MISSING_OUT has no minutes_early → no overflow deduction
     # afternoon block: break_end(13:30) → check_out(17:00) = 3.5h
     assert w == pytest.approx(4.5, abs=0.01)
     assert l == pytest.approx(3.5, abs=0.01)
+    assert c == 0.0
 
 
 @pytest.mark.django_db
@@ -139,10 +147,11 @@ def test_late_phep2_with_overflow(base):
     record = _record(base['upload'], base['emp'], 1, ['LATE'], minutes_late=341)
     reason = _reason('Nghỉ phép nửa ngày', full_day=True)
     exp = _explanation(record, base['emp'], ci_reason=reason, ci_status='approved')
-    w, l = compute_record_hours(record, exp, shift, 0)
+    w, l, c = compute_record_hours(record, exp, shift, 0)
     overflow = 341 - 240 - 90  # = 11 min
     assert l == pytest.approx(4.0 + overflow / 60, abs=0.01)
     assert w == pytest.approx(8.0 - 4.0 - overflow / 60, abs=0.01)
+    assert c == 0.0
 
 
 @pytest.mark.django_db
@@ -153,10 +162,11 @@ def test_early_phep2_with_overflow(base):
     record = _record(base['upload'], base['emp'], 1, ['EARLY_LEAVE'], minutes_early=307)
     reason = _reason('Nghỉ phép nửa ngày', full_day=True)
     exp = _explanation(record, base['emp'], co_reason=reason, co_status='approved')
-    w, l = compute_record_hours(record, exp, shift, 0)
+    w, l, c = compute_record_hours(record, exp, shift, 0)
     overflow = 307 - 210 - 90  # = 7 min
     assert l == pytest.approx(3.5 + overflow / 60, abs=0.01)
     assert w == pytest.approx(8.0 - 3.5 - overflow / 60, abs=0.01)
+    assert c == 0.0
 
 
 @pytest.mark.django_db
@@ -166,18 +176,20 @@ def test_absent_approved_nghi_phep(base):
     reason = _reason('Nghỉ phép cả ngày')
     exp = _explanation(record, base['emp'], ci_reason=reason, ci_status='approved',
                        co_reason=reason, co_status='approved')
-    w, l = compute_record_hours(record, exp, shift, 0)
+    w, l, c = compute_record_hours(record, exp, shift, 0)
     assert w == 0.0
     assert l == 8.0  # full day as leave
+    assert c == 0.0
 
 
 @pytest.mark.django_db
 def test_absent_no_explanation(base):
     shift = base['shift']
     record = _record(base['upload'], base['emp'], 1, ['ABSENT'])
-    w, l = compute_record_hours(record, None, shift, 0)
+    w, l, c = compute_record_hours(record, None, shift, 0)
     assert w == 0.0
     assert l == 0.0  # unpaid absence
+    assert c == 0.0
 
 
 @pytest.mark.django_db
@@ -187,9 +199,10 @@ def test_absent_unpaid(base):
     reason = _reason('Nghỉ không lương')
     exp = _explanation(record, base['emp'], ci_reason=reason, ci_status='approved',
                        co_reason=reason, co_status='approved')
-    w, l = compute_record_hours(record, exp, shift, 0)
+    w, l, c = compute_record_hours(record, exp, shift, 0)
     assert w == 0.0
     assert l == 0.0  # unpaid
+    assert c == 0.0
 
 
 @pytest.mark.django_db
@@ -198,9 +211,10 @@ def test_qcc_lần_1_no_split(base):
     record = _record(base['upload'], base['emp'], 1, ['MISSING_IN'])
     reason = _reason('Quên chấm công')
     exp = _explanation(record, base['emp'], ci_reason=reason, ci_status='approved')
-    w, l = compute_record_hours(record, exp, shift, 1)  # lần 1
+    w, l, c = compute_record_hours(record, exp, shift, 1)  # lần 1
     assert w == 8.0
     assert l == 0.0
+    assert c == 0.0
 
 
 @pytest.mark.django_db
@@ -209,9 +223,10 @@ def test_qcc_lần_3_split_50_50(base):
     record = _record(base['upload'], base['emp'], 1, ['MISSING_IN'])
     reason = _reason('Quên chấm công')
     exp = _explanation(record, base['emp'], ci_reason=reason, ci_status='approved')
-    w, l = compute_record_hours(record, exp, shift, 3)  # lần 3
+    w, l, c = compute_record_hours(record, exp, shift, 3)  # lần 3
     assert w == 4.0
     assert l == 4.0
+    assert c == 0.0
 
 
 # --- Integration tests for calculate_month ---
@@ -279,3 +294,71 @@ def test_calculate_absent_with_leave(base):
     calc = result[s['emp'].code]
     assert float(calc.work_hours) == 0.0
     assert float(calc.leave_hours) == 8.0
+
+
+def _comp_reason(name, full_day=False):
+    return ExplanationReason.objects.create(
+        name=name, requires_full_day_shift=full_day, is_compensatory=True
+    )
+
+
+@pytest.mark.django_db
+def test_missing_in_nghi_bu_nua_ngay(base):
+    """Nghỉ bù nửa ngày → work -4h, leave 0, compensatory +4h"""
+    shift = base['shift']
+    record = _record(base['upload'], base['emp'], 1, ['MISSING_IN'])
+    reason = _comp_reason('Nghỉ bù nửa ngày', full_day=True)
+    exp = _explanation(record, base['emp'], ci_reason=reason, ci_status='approved')
+    w, l, c = compute_record_hours(record, exp, shift, 0)
+    assert w == 4.0
+    assert l == 0.0
+    assert c == 4.0
+
+
+@pytest.mark.django_db
+def test_absent_nghi_bu_ca_ngay(base):
+    """Nghỉ bù cả ngày → work 0, leave 0, compensatory 8h"""
+    shift = base['shift']
+    record = _record(base['upload'], base['emp'], 1, ['ABSENT'])
+    reason = _comp_reason('Nghỉ bù cả ngày')
+    exp = _explanation(record, base['emp'],
+                       ci_reason=reason, ci_status='approved',
+                       co_reason=reason, co_status='approved')
+    w, l, c = compute_record_hours(record, exp, shift, 0)
+    assert w == 0.0
+    assert l == 0.0
+    assert c == 8.0
+
+
+@pytest.mark.django_db
+def test_late_phep_with_use_compensatory_checkbox(base):
+    """Đi muộn 30p, lý do 'Đi muộn/ Về sớm', tick use_compensatory → trừ bù thay phép"""
+    shift = base['shift']
+    record = _record(base['upload'], base['emp'], 1, ['LATE'], minutes_late=30)
+    reason = _reason('Đi muộn/ Về sớm')
+    exp = Explanation.objects.create(
+        record=record, employee=base['emp'],
+        ci_reason=reason, ci_status='approved',
+        ci_use_compensatory=True,
+    )
+    w, l, c = compute_record_hours(record, exp, shift, 0)
+    assert w == 7.5
+    assert l == 0.0
+    assert c == 0.5
+
+
+@pytest.mark.django_db
+def test_missing_in_phep_nua_ngay_use_compensatory(base):
+    """Nghỉ phép nửa ngày nhưng tick use_compensatory → route sang bù"""
+    shift = base['shift']
+    record = _record(base['upload'], base['emp'], 1, ['MISSING_IN'])
+    reason = _reason('Nghỉ phép nửa ngày', full_day=True)
+    exp = Explanation.objects.create(
+        record=record, employee=base['emp'],
+        ci_reason=reason, ci_status='approved',
+        ci_use_compensatory=True,
+    )
+    w, l, c = compute_record_hours(record, exp, shift, 0)
+    assert w == 4.0
+    assert l == 0.0
+    assert c == 4.0

@@ -63,7 +63,7 @@ def _build_detail_rows(month: str):
             qcc_count += 1
             qcc_by_emp[emp.code] = qcc_count
 
-        w, l = compute_record_hours(record, exp, shift, qcc_count)
+        w, l, _c = compute_record_hours(record, exp, shift, qcc_count)
 
         error_types = record.error_types or []
         error_label = ', '.join(_ERROR_LABELS.get(e, e) for e in error_types) if error_types else '-'
