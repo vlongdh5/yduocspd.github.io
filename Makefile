@@ -1,4 +1,4 @@
-.PHONY: dev test migrate seed createsuperuser collectstatic \
+.PHONY: dev test migrate seed createsuperuser collectstatic prod \
         docker-build docker-up docker-down docker-logs docker-logs-nginx \
         docker-shell docker-reset docker-cert-selfsigned
 
@@ -25,7 +25,8 @@ collectstatic:
 	.venv/bin/python manage.py collectstatic --noinput
 
 prod:
-	DJANGO_SETTINGS_MODULE=hrms.settings.production .venv/bin/gunicorn hrms.wsgi:application -c gunicorn.conf.py
+	$(DC) build web
+	$(DC) up -d --no-deps web
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 DC = docker compose --env-file .env.docker
