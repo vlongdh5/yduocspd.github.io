@@ -1,0 +1,97 @@
+{% load static %}
+<div id="sidebar" class="d-flex flex-column">
+    <!-- Header -->
+    <div class="sidebar-header d-flex align-items-center justify-content-between px-3 py-3">
+        <a href="/" class="sidebar-brand d-flex align-items-center text-decoration-none">
+            <i class="bi bi-people-fill fs-5 text-white"></i>
+            <span class="sidebar-label ms-2 fw-bold text-white">HR System</span>
+        </a>
+        <button id="sidebar-toggle" class="btn btn-link p-0 text-white d-none d-lg-block" title="Thu gọn">
+            <i class="bi bi-layout-sidebar-reverse fs-5"></i>
+        </button>
+    </div>
+
+    <!-- Nav -->
+    <nav class="sidebar-nav flex-grow-1 px-2 pb-2">
+        <!-- Employee / chung -->
+        <a href="/attendance/"
+           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if request.path == '/attendance/' %}active{% endif %}"
+           data-bs-toggle="tooltip" data-bs-placement="right" title="Chấm công">
+            <i class="bi bi-calendar-check fs-5"></i>
+            <span class="sidebar-label">Chấm công</span>
+        </a>
+
+        {% if user.is_authenticated and not user.is_hr and not user.is_tbp %}
+        <a href="/explanations/my/"
+           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/explanations/my' in request.path %}active{% endif %}"
+           data-bs-toggle="tooltip" data-bs-placement="right" title="Giải trình của tôi">
+            <i class="bi bi-file-text fs-5"></i>
+            <span class="sidebar-label">Giải trình của tôi</span>
+        </a>
+        {% endif %}
+
+        {% if user.is_tbp %}
+        <a href="/explanations/pending/"
+           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/explanations/pending' in request.path %}active{% endif %}"
+           data-bs-toggle="tooltip" data-bs-placement="right" title="Duyệt giải trình">
+            <i class="bi bi-check2-circle fs-5"></i>
+            <span class="sidebar-label">Duyệt giải trình</span>
+        </a>
+        {% endif %}
+
+        {% if user.is_hr %}
+        <div class="sidebar-section-label px-2 mt-3 mb-1">
+            <small class="text-uppercase fw-semibold" style="font-size: 0.65rem; letter-spacing: 0.08em; color: #64748b;">HR</small>
+        </div>
+        <a href="/attendance/upload/"
+           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/attendance/upload' in request.path %}active{% endif %}"
+           data-bs-toggle="tooltip" data-bs-placement="right" title="Upload chấm công">
+            <i class="bi bi-upload fs-5"></i>
+            <span class="sidebar-label">Upload chấm công</span>
+        </a>
+        <a href="/reports/calculate/"
+           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/reports/' in request.path %}active{% endif %}"
+           data-bs-toggle="tooltip" data-bs-placement="right" title="Tính công">
+            <i class="bi bi-calculator fs-5"></i>
+            <span class="sidebar-label">Tính công</span>
+        </a>
+        <a href="/employees/"
+           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/employees/' in request.path %}active{% endif %}"
+           data-bs-toggle="tooltip" data-bs-placement="right" title="Quản lý nhân viên">
+            <i class="bi bi-people fs-5"></i>
+            <span class="sidebar-label">Quản lý nhân viên</span>
+        </a>
+        {% endif %}
+
+        {% if user.is_superuser %}
+        <div class="sidebar-section-label px-2 mt-3 mb-1">
+            <small class="text-uppercase fw-semibold" style="font-size: 0.65rem; letter-spacing: 0.08em; color: #64748b;">Hệ thống</small>
+        </div>
+        <a href="/accounts/config/"
+           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/accounts/config' in request.path %}active{% endif %}"
+           data-bs-toggle="tooltip" data-bs-placement="right" title="Cấu hình">
+            <i class="bi bi-sliders fs-5"></i>
+            <span class="sidebar-label">Cấu hình</span>
+        </a>
+        {% endif %}
+    </nav>
+
+    <!-- Footer -->
+    <div class="sidebar-footer border-top px-2 py-2" style="border-color: #334155 !important;">
+        <a href="/accounts/otp/setup-totp/"
+           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none"
+           data-bs-toggle="tooltip" data-bs-placement="right" title="Cài Google Authenticator">
+            <i class="bi bi-shield-lock fs-5"></i>
+            <span class="sidebar-label text-truncate" style="max-width: 140px;">{{ user.email }}</span>
+        </a>
+        <form method="post" action="/accounts/logout/" class="m-0">
+            {% csrf_token %}
+            <button type="submit"
+                    class="sidebar-item btn btn-link w-100 d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none text-start"
+                    data-bs-toggle="tooltip" data-bs-placement="right" title="Đăng xuất">
+                <i class="bi bi-box-arrow-right fs-5"></i>
+                <span class="sidebar-label" style="color: #f87171;">Đăng xuất</span>
+            </button>
+        </form>
+    </div>
+</div>
