@@ -4,6 +4,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.views.generic import TemplateView
 from django.core.paginator import Paginator
+from django.db import transaction as db_transaction
+from django.db.models import F
 from django.http import HttpResponse
 from django.utils import timezone
 from decimal import Decimal
@@ -70,8 +72,7 @@ def leave_balance_view(request, pk):
             messages.success(request, 'Đã cập nhật ngày phép.')
             return redirect('employees:leave_balance', pk=pk)
     else:
-        from datetime import date
-        form = LeaveBalanceForm(initial={'year': date.today().year})
+        form = LeaveBalanceForm(initial={'year': timezone.now().year})
     return render(request, 'employees/leave_balance.html', {
         'emp': emp, 'balances': balances, 'form': form
     })
@@ -158,21 +159,27 @@ class MyLeaveView(LoginRequiredMixin, TemplateView):
 def leave_management(request):
     if not _hr_only(request):
         return redirect('attendance:my_attendance')
-    from django.utils import timezone as tz
-    current_year = tz.now().year
+    current_year = timezone.now().year
     dept_id = request.GET.get('dept')
     employees_qs = Employee.objects.select_related(
         'department', 'compensatory_balance'
-    ).prefetch_related('leave_balances').filter(is_active=True)
+    ).filter(is_active=True)
     if dept_id:
         employees_qs = employees_qs.filter(department_id=dept_id)
-    employees_qs = employees_qs.order_by('code')
+    employees_list = list(employees_qs.order_by('code'))
 
-    emp_data = []
-    for emp in employees_qs:
-        lb = emp.leave_balances.filter(year=current_year).first()
-        cb = getattr(emp, 'compensatory_balance', None)
-        emp_data.append({'emp': emp, 'lb': lb, 'cb': cb})
+    leave_by_emp = {
+        lb.employee_id: lb
+        for lb in LeaveBalance.objects.filter(employee__in=employees_list, year=current_year)
+    }
+    emp_data = [
+        {
+            'emp': emp,
+            'lb': leave_by_emp.get(emp.pk),
+            'cb': getattr(emp, 'compensatory_balance', None),
+        }
+        for emp in employees_list
+    ]
 
     departments = Department.objects.all()
 
@@ -227,17 +234,19 @@ def compensatory_credit(request, emp_pk):
         form = CompensatoryCreditForm(request.POST)
         if form.is_valid():
             hours = form.cleaned_data['hours']
-            comp_balance.total_hours += hours
-            comp_balance.save()
-            CompensatoryTransaction.objects.create(
-                employee=emp,
-                balance=comp_balance,
-                transaction_type=CompensatoryTransaction.Type.CREDIT,
-                hours=hours,
-                date=form.cleaned_data['date'],
-                note=form.cleaned_data.get('note', ''),
-                created_by=request.user,
-            )
+            with db_transaction.atomic():
+                CompensatoryBalance.objects.filter(pk=comp_balance.pk).update(
+                    total_hours=F('total_hours') + hours
+                )
+                CompensatoryTransaction.objects.create(
+                    employee=emp,
+                    balance=comp_balance,
+                    transaction_type=CompensatoryTransaction.Type.CREDIT,
+                    hours=hours,
+                    date=form.cleaned_data['date'],
+                    note=form.cleaned_data.get('note', ''),
+                    created_by=request.user,
+                )
             messages.success(request, f'Đã cấp {hours}h nghỉ bù cho {emp.full_name}.')
             return redirect('employees:compensatory_credit', emp_pk=emp_pk)
     else:

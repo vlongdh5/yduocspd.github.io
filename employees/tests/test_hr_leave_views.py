@@ -38,7 +38,10 @@ def test_leave_management_shows_leave_balance(client, hr_setup):
     LeaveBalance.objects.create(employee=hr_setup['emp'], year=timezone.now().year, total_days=12, used_days=3)
     resp = client.get(reverse('employees:leave_management'))
     assert resp.status_code == 200
-    assert '9' in resp.content.decode()  # remaining days
+    emp_data = resp.context['emp_data']
+    assert len(emp_data) == 1
+    assert emp_data[0]['lb'] is not None
+    assert emp_data[0]['lb'].remaining_days == 9
 
 
 @pytest.mark.django_db

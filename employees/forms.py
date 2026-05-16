@@ -89,7 +89,7 @@ class LeaveBalanceForm(forms.ModelForm):
 
 class CompensatoryCreditForm(forms.Form):
     hours = forms.DecimalField(
-        max_digits=4, decimal_places=1, min_value=Decimal('0.5'),
+        max_digits=4, decimal_places=1, min_value=Decimal('0.5'), max_value=Decimal('999.9'),
         widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5'}),
         label='Số giờ cấp bù'
     )
