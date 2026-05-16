@@ -113,7 +113,7 @@ def test_compensatory_reasons_seeded():
 
 
 @pytest.mark.django_db
-def test_explanation_compensatory_flags_default_false(db):
+def test_explanation_compensatory_flags_default_false():
     from attendance.models import AttendanceRecord, AttendanceUpload
     from employees.models import Employee, Department
     from accounts.models import User
