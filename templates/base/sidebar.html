@@ -61,10 +61,16 @@
             <span class="sidebar-label">Tính công</span>
         </a>
         <a href="/employees/"
-           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/employees/' in request.path %}active{% endif %}"
+           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/employees/' in request.path and '/employees/leave-management' not in request.path %}active{% endif %}"
            data-bs-toggle="tooltip" data-bs-placement="right" title="Quản lý nhân viên">
             <i class="bi bi-people fs-5"></i>
             <span class="sidebar-label">Quản lý nhân viên</span>
+        </a>
+        <a href="{% url 'employees:leave_management' %}"
+           class="sidebar-item d-flex align-items-center gap-2 px-2 py-2 rounded text-decoration-none {% if '/employees/leave-management' in request.path %}active{% endif %}"
+           data-bs-toggle="tooltip" data-bs-placement="right" title="Phép & Nghỉ bù">
+            <i class="bi bi-calendar2-week fs-5"></i>
+            <span class="sidebar-label">Phép &amp; Nghỉ bù</span>
         </a>
         {% endif %}
 

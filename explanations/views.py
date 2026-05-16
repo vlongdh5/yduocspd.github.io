@@ -58,6 +58,8 @@ def submit_explanation(request, record_id):
         ci_note = request.POST.get('ci_note', '').strip()
         co_reason_id = request.POST.get('co_reason')
         co_note = request.POST.get('co_note', '').strip()
+        ci_use_compensatory = request.POST.get('ci_use_compensatory') == '1'
+        co_use_compensatory = request.POST.get('co_use_compensatory') == '1'
 
         ci_changed = has_ci and not ci_locked and ci_reason_id
         co_changed = has_co and not co_locked and co_reason_id
@@ -72,6 +74,7 @@ def submit_explanation(request, record_id):
         if ci_changed:
             exp.ci_reason = get_object_or_404(ExplanationReason, pk=ci_reason_id, is_active=True)
             exp.ci_note = ci_note
+            exp.ci_use_compensatory = ci_use_compensatory
             exp.ci_status = Explanation.Status.PENDING
             exp.ci_reviewed_by = None
             exp.ci_reviewed_at = None
@@ -80,6 +83,7 @@ def submit_explanation(request, record_id):
         if co_changed:
             exp.co_reason = get_object_or_404(ExplanationReason, pk=co_reason_id, is_active=True)
             exp.co_note = co_note
+            exp.co_use_compensatory = co_use_compensatory
             exp.co_status = Explanation.Status.PENDING
             exp.co_reviewed_by = None
             exp.co_reviewed_at = None
@@ -89,6 +93,19 @@ def submit_explanation(request, record_id):
         messages.success(request, 'Giải trình đã được nộp.')
         return redirect('attendance:my_attendance')
 
+    from employees.models import CompensatoryBalance
+    try:
+        comp_balance = request.user.employee_profile.compensatory_balance
+    except Exception:
+        comp_balance = None
+
+    leave_reason_ids = list(ExplanationReason.objects.filter(
+        is_active=True, name__in=[
+            'Nghỉ phép cả ngày', 'Nghỉ phép nửa ngày', 'Đi muộn/ Về sớm',
+            'Nghỉ bù cả ngày', 'Nghỉ bù nửa ngày'
+        ]
+    ).values_list('id', flat=True))
+
     return render(request, 'explanations/submit.html', {
         'record': record,
         'exp': exp,
@@ -97,6 +114,8 @@ def submit_explanation(request, record_id):
         'has_co': has_co,
         'ci_locked': ci_locked,
         'co_locked': co_locked,
+        'comp_balance': comp_balance,
+        'leave_reason_ids': leave_reason_ids,
     })
 
 
@@ -225,7 +244,17 @@ def review_explanation(request, pk):
             return redirect('explanations:review', pk=exp.pk)
         return redirect('explanations:pending_approvals')
 
-    return render(request, 'explanations/review.html', {'exp': exp, 'locked': locked})
+    from employees.models import CompensatoryBalance
+    try:
+        comp_balance = exp.employee.compensatory_balance
+    except CompensatoryBalance.DoesNotExist:
+        comp_balance = None
+
+    return render(request, 'explanations/review.html', {
+        'exp': exp,
+        'locked': locked,
+        'comp_balance': comp_balance,
+    })
 
 
 @login_required

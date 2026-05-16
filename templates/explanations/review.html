@@ -19,6 +19,15 @@
             </div>
         </div>
 
+        {% if comp_balance %}
+        <div class="alert alert-info py-2 mb-3">
+          <small><i class="bi bi-clock-history"></i>
+            Giờ bù còn lại của NV: <strong>{{ comp_balance.remaining_hours }}h</strong>
+            (tổng {{ comp_balance.total_hours }}h, đã dùng {{ comp_balance.used_hours }}h)
+          </small>
+        </div>
+        {% endif %}
+
         {% if locked %}
         <div class="alert alert-secondary">
             <i class="bi bi-lock"></i> Tháng này đã được HR chốt công — không thể thay đổi phê duyệt.
@@ -42,7 +51,11 @@
             </div>
             <div class="card-body">
                 {% if exp.ci_reason %}
-                <p class="mb-1"><strong>Lý do NV:</strong> {{ exp.ci_reason.name }}</p>
+                <p class="mb-1"><strong>Lý do NV:</strong> {{ exp.ci_reason.name }}
+                  {% if exp.ci_use_compensatory %}
+                    <span class="badge bg-warning text-dark ms-1">Dùng giờ bù</span>
+                  {% endif %}
+                </p>
                 <p class="mb-2"><strong>Ghi chú:</strong> {{ exp.ci_note|default:"-" }}</p>
                 {% else %}
                 <p class="text-muted fst-italic mb-2">Nhân viên chưa nộp giải trình phía Check-in.</p>
@@ -120,7 +133,11 @@
             </div>
             <div class="card-body">
                 {% if exp.co_reason %}
-                <p class="mb-1"><strong>Lý do NV:</strong> {{ exp.co_reason.name }}</p>
+                <p class="mb-1"><strong>Lý do NV:</strong> {{ exp.co_reason.name }}
+                  {% if exp.co_use_compensatory %}
+                    <span class="badge bg-warning text-dark ms-1">Dùng giờ bù</span>
+                  {% endif %}
+                </p>
                 <p class="mb-2"><strong>Ghi chú:</strong> {{ exp.co_note|default:"-" }}</p>
                 {% else %}
                 <p class="text-muted fst-italic mb-2">Nhân viên chưa nộp giải trình phía Check-out.</p>
