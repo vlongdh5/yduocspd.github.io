@@ -3,7 +3,7 @@ from datetime import date, time
 from reports.calculator import calculate_month, compute_record_hours
 from attendance.models import AttendanceUpload, AttendanceRecord, Shift
 from explanations.models import Explanation, ExplanationReason
-from employees.models import Employee, Department, LeaveBalance
+from employees.models import Employee, Department, LeaveBalance, CompensatoryBalance, CompensatoryTransaction
 from accounts.models import User
 
 
@@ -364,3 +364,53 @@ def test_missing_in_phep_nua_ngay_use_compensatory(base):
     assert w == 4.0
     assert l == 0.0
     assert c == 4.0
+
+
+@pytest.mark.django_db
+def test_calculate_month_creates_compensatory_transaction(base):
+    """Khi tính lương, giờ bù được debit vào CompensatoryBalance"""
+    s = base
+    bal = CompensatoryBalance.objects.create(employee=s['emp'], total_hours=8, used_hours=0)
+    record = _record(s['upload'], s['emp'], 1, ['ABSENT'])
+    reason = ExplanationReason.objects.create(name='Nghỉ bù cả ngày', is_compensatory=True)
+    _explanation(record, s['emp'], ci_reason=reason, ci_status='approved',
+                 co_reason=reason, co_status='approved')
+    result = calculate_month(month='2026-05', calculated_by=s['hr'])
+    calc = result[s['emp'].code]
+    assert float(calc.work_hours) == 0.0
+    assert float(calc.leave_hours) == 0.0
+    bal.refresh_from_db()
+    assert float(bal.used_hours) == 8.0
+    assert CompensatoryTransaction.objects.filter(
+        employee=s['emp'], transaction_type='debit'
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_calculate_month_fallback_when_comp_balance_insufficient(base):
+    """Nếu giờ bù không đủ, fallback: treat as excused (work = 8, leave = 0)"""
+    s = base
+    CompensatoryBalance.objects.create(employee=s['emp'], total_hours=2, used_hours=0)
+    record = _record(s['upload'], s['emp'], 1, ['ABSENT'])
+    reason = ExplanationReason.objects.create(name='Nghỉ bù cả ngày', is_compensatory=True)
+    _explanation(record, s['emp'], ci_reason=reason, ci_status='approved',
+                 co_reason=reason, co_status='approved')
+    result = calculate_month(month='2026-05', calculated_by=s['hr'])
+    calc = result[s['emp'].code]
+    # 8h bù required but only 2h available → fallback: treat as excused, work = 8
+    assert float(calc.work_hours) == 8.0
+    assert float(calc.leave_hours) == 0.0
+
+
+@pytest.mark.django_db
+def test_calculate_month_fallback_when_leave_balance_insufficient(base):
+    """Nếu phép không đủ, fallback: không trừ phép"""
+    s = base
+    LeaveBalance.objects.create(employee=s['emp'], year=2026, total_days=0)
+    record = _record(s['upload'], s['emp'], 1, ['ABSENT'])
+    reason = ExplanationReason.objects.create(name='Nghỉ phép cả ngày')
+    _explanation(record, s['emp'], ci_reason=reason, ci_status='approved',
+                 co_reason=reason, co_status='approved')
+    result = calculate_month(month='2026-05', calculated_by=s['hr'])
+    calc = result[s['emp'].code]
+    assert float(calc.leave_hours) == 0.0

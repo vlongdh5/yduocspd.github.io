@@ -2,7 +2,7 @@ from decimal import Decimal
 from datetime import time
 from attendance.models import AttendanceRecord, Shift
 from explanations.models import Explanation
-from employees.models import Employee
+from employees.models import Employee, LeaveBalance, CompensatoryBalance, CompensatoryTransaction
 from reports.models import AttendanceCalculation
 from accounts.models import User
 
@@ -319,7 +319,16 @@ def calculate_month(month: str, calculated_by: User) -> dict:
         emp = emp_records[0].employee
         total_work = 0.0
         total_leave = 0.0
+        total_compensatory = 0.0
         qcc_count = 0
+
+        lb = LeaveBalance.objects.filter(
+            employee=emp, year=int(month[:4])
+        ).first()
+        # None means no balance record → no constraint; non-None means apply running constraint
+        running_leave_remaining = float(lb.remaining_days * 8) if lb is not None else None
+        comp_balance, _ = CompensatoryBalance.objects.get_or_create(employee=emp)
+        running_comp_remaining = float(comp_balance.remaining_hours)
 
         for record in emp_records:
             exp = getattr(record, 'explanation', None)
@@ -328,12 +337,27 @@ def calculate_month(month: str, calculated_by: User) -> dict:
             if _is_qcc_record(exp):
                 qcc_count += 1
 
-            w, l, _c = compute_record_hours(record, exp, shift, qcc_count)
+            w, l, c = compute_record_hours(record, exp, shift, qcc_count)
+
+            if c > 0 and running_comp_remaining - c < 0:
+                # Insufficient comp balance: treat as excused (work full shift, no leave, no comp)
+                w = float(shift.work_hours) if shift else 8.0
+                l = 0.0
+                c = 0.0
+
+            if l > 0 and running_leave_remaining is not None and running_leave_remaining - l < 0:
+                l = 0.0
+
+            running_comp_remaining -= c
+            if running_leave_remaining is not None:
+                running_leave_remaining -= l
             total_work += w
             total_leave += l
+            total_compensatory += c
 
         total_work = round(total_work, 2)
         total_leave = round(total_leave, 2)
+        total_compensatory = round(total_compensatory, 2)
 
         calc, _ = AttendanceCalculation.objects.update_or_create(
             employee=emp,
@@ -347,6 +371,25 @@ def calculate_month(month: str, calculated_by: User) -> dict:
                 'status': AttendanceCalculation.Status.DRAFT,
             }
         )
+
+        if total_compensatory > 0:
+            import calendar
+            from datetime import date as _date
+            comp_balance.used_hours = Decimal(str(
+                float(comp_balance.used_hours) + total_compensatory
+            ))
+            comp_balance.save()
+            last_day = calendar.monthrange(int(month[:4]), int(month[5:]))[1]
+            CompensatoryTransaction.objects.create(
+                employee=emp,
+                balance=comp_balance,
+                transaction_type=CompensatoryTransaction.Type.DEBIT,
+                hours=Decimal(str(total_compensatory)),
+                date=_date(int(month[:4]), int(month[5:]), last_day),
+                note=f'Tính công tháng {month}',
+                created_by=calculated_by,
+            )
+
         calcs[code] = calc
 
     return calcs
