@@ -257,18 +257,20 @@ def test_calculate_blocks_pending_explanation(base):
     record = _record(s['upload'], s['emp'], 1, ['LATE'], minutes_late=30)
     reason = _reason('Đi muộn/ Về sớm')
     _explanation(record, s['emp'], ci_reason=reason, ci_status='pending')
-    with pytest.raises(ValueError, match='chờ/từ chối'):
+    with pytest.raises(ValueError, match='chờ TBP duyệt'):
         calculate_month(month='2026-05', calculated_by=s['hr'])
 
 
 @pytest.mark.django_db
-def test_calculate_blocks_rejected_explanation(base):
+def test_calculate_rejected_explanation_proceeds(base):
+    """Rejected explanation = TBP đã xử lý, tính công bình thường (NV bị trừ công)"""
     s = base
     record = _record(s['upload'], s['emp'], 1, ['LATE'], minutes_late=30)
     reason = _reason('Đi muộn/ Về sớm')
     _explanation(record, s['emp'], ci_reason=reason, ci_status='rejected')
-    with pytest.raises(ValueError, match='chờ/từ chối'):
-        calculate_month(month='2026-05', calculated_by=s['hr'])
+    result = calculate_month(month='2026-05', calculated_by=s['hr'])
+    calc = result[s['emp'].code]
+    assert float(calc.work_hours) == 7.5  # rejected = unapproved → trừ công
 
 
 @pytest.mark.django_db

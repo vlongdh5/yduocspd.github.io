@@ -182,8 +182,9 @@ def compute_record_hours(record, exp, shift, qcc_count):
     if 'ABSENT' in error_set:
         reason = ci_reason or co_reason
         approved = ci_approved or co_approved
+        use_comp = ci_use_comp or co_use_comp
         if approved and reason:
-            if reason.is_compensatory:
+            if reason.is_compensatory or use_comp:
                 return 0.0, 0.0, base_work
             if reason.name in LEAVE_FULL_DAY_REASONS:
                 return 0.0, base_work, 0.0
